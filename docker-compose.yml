@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  db:
+    image: ankane/pgvector
+    container_name: rag_pgvector
+    restart: always
+    environment:
+      POSTGRES_USER: rag_user
+      POSTGRES_PASSWORD: rag_pass
+      POSTGRES_DB: rag_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  app:
+    build: .
+    container_name: rag_streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      DB_CONN: postgresql://rag_user:rag_pass@db:5432/rag_db
+    depends_on:
+      - db
+    volumes:
+      - ./app:/app
+
+volumes:
+  pgdata:

@@ -1,0 +1,8 @@
+streamlit
+pdfplumber
+sentence-transformers
+psycopg2-binary
+sqlalchemy
+transformers
+torch
+hf_xet
