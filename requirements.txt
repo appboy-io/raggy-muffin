@@ -6,3 +6,10 @@ sqlalchemy
 transformers
 torch
 hf_xet
+nest_asyncio
+pandas
+python-dotenv
+spacy
+scikit-learn
+fuzzywuzzy
+python-Levenshtein
