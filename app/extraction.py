@@ -24,12 +24,16 @@ ADDRESS_PATTERN = r'\b\d+\s+[A-Za-z0-9\s,.-]+\b(?:avenue|ave|street|st|road|rd|b
 def extract_structured_data(text):
     """
     Extract structured data from text including:
+    - Provider name
     - Aid categories
     - Contact information
     - Service description
     """
     # Process with spaCy
     doc = nlp(text)
+    
+    # Extract provider name
+    provider_name = extract_provider_name(text, doc)
     
     # Extract categories
     categories = extract_categories(text)
@@ -46,10 +50,64 @@ def extract_structured_data(text):
     description = extract_service_description(text, doc)
     
     return {
+        "provider_name": provider_name,
         "categories": categories,
         "contacts": contacts,
         "description": description
     }
+
+def extract_provider_name(text, doc):
+    """Extract provider/organization name using spaCy NER and patterns"""
+    # First try spaCy's named entity recognition for organizations
+    org_entities = [ent.text for ent in doc.ents if ent.label_ in ["ORG"]]
+    
+    # Filter out common false positives
+    false_positives = ["email", "phone", "website", "address", "contact", "information"]
+    org_entities = [org for org in org_entities if not any(fp in org.lower() for fp in false_positives)]
+    
+    if org_entities:
+        # Return the longest organization name (likely most complete)
+        return max(org_entities, key=len)
+    
+    # Fallback to pattern-based extraction
+    lines = text.split('\n')
+    
+    # Look for common provider name patterns
+    for line in lines[:10]:  # Check first 10 lines
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Look for organization indicators
+        org_patterns = [
+            r'^([A-Z][A-Za-z\s&,.-]+(?:Inc\.?|LLC|Corp\.?|Foundation|Center|Agency|Services|Association|Organization|Department))',
+            r'^([A-Z][A-Za-z\s&,.-]{5,50})\s*$',  # Title case lines (likely org names)
+            r'Organization[:\s]+([A-Za-z\s&,.-]+)',
+            r'Provider[:\s]+([A-Za-z\s&,.-]+)',
+            r'Agency[:\s]+([A-Za-z\s&,.-]+)',
+            r'Department[:\s]+([A-Za-z\s&,.-]+)'
+        ]
+        
+        for pattern in org_patterns:
+            match = re.search(pattern, line, re.IGNORECASE)
+            if match:
+                name = match.group(1).strip()
+                if len(name) > 3 and len(name) < 100:  # Reasonable length
+                    return name
+    
+    # If no pattern matches, try first meaningful line that looks like a title
+    for line in lines[:5]:
+        line = line.strip()
+        if line and len(line) > 10 and len(line) < 80:
+            # Skip lines that look like categories or contact info
+            skip_patterns = ['email', 'phone', 'address', 'website', 'http', '@', 'contact', 'categories']
+            if not any(skip in line.lower() for skip in skip_patterns):
+                # Check if it's mostly title case (likely an organization name)
+                words = line.split()
+                if len(words) >= 2 and sum(1 for w in words if w[0].isupper()) >= len(words) * 0.6:
+                    return line
+    
+    return ""
 
 def extract_categories(text):
     """Extract aid categories from text using fuzzy matching"""
@@ -130,6 +188,10 @@ def normalize_text(extracted_data):
     suitable for embedding and retrieval
     """
     normalized_text = ""
+    
+    # Add provider name
+    if extracted_data.get("provider_name"):
+        normalized_text += "PROVIDER: " + extracted_data["provider_name"] + "\n\n"
     
     # Add categories with normalization
     if extracted_data["categories"]:

@@ -18,7 +18,7 @@ generator = pipeline(
     model=model,
     tokenizer=tokenizer,
     device=device,
-    max_length=100  # Set default max length
+    max_length=512  # Increase to handle longer sequences
 )
 
 def detect_category_in_query(query):
@@ -219,130 +219,73 @@ def extract_categories_from_chunks(chunks):
     return list(set(categories))
 
 def generate_answer(question, context_chunks):
-    """Generate informative answers for provider inquiries using structured data awareness"""
+    """Generate structured answers for provider inquiries"""
     
-    # Check if we have any context
     if not context_chunks:
         return "No provider information found for this query."
     
-    # Extract categories from the question
+    # Extract structured data
     question_categories = detect_category_in_query(question)
-    
-    # Extract categories from the chunks
     chunk_categories = extract_categories_from_chunks(context_chunks)
-    
-    # Combine categories (question categories first, then chunk categories)
-    all_categories = []
-    all_categories.extend(question_categories)
-    for cat in chunk_categories:
-        if cat not in all_categories:
-            all_categories.append(cat)
-    
-    # Extract contact information
     contact_info = extract_contact_info(context_chunks)
     
-    # Format context with more details
-    formatted_context = " ".join(context_chunks)
+    # Combine categories
+    all_categories = list(set(question_categories + chunk_categories))
     
-    # Create category-aware prompt
-    category_str = ""
+    # Build structured response
+    response_parts = []
+    
+    # Add relevant categories
     if all_categories:
-        category_str = f"The information is about the following categories: {', '.join(all_categories)}.\n"
+        response_parts.append(f"**Categories:** {', '.join(all_categories)}")
+        response_parts.append("")
     
-    # Add contact information to prompt if available
-    contact_str = ""
+    # Add contact information
     if any(contact_info.values()):
-        contact_str = "The information contains the following contact details:\n"
+        response_parts.append("**Contact Information:**")
         
         if contact_info["emails"]:
-            contact_str += f"- Emails: {', '.join(contact_info['emails'])}\n"
+            response_parts.append(f"• Email: {', '.join(contact_info['emails'])}")
         
         if contact_info["phones"]:
-            contact_str += f"- Phone numbers: {', '.join(contact_info['phones'])}\n"
+            response_parts.append(f"• Phone: {', '.join(contact_info['phones'])}")
         
         if contact_info["websites"]:
-            contact_str += f"- Websites: {', '.join(contact_info['websites'])}\n"
+            response_parts.append(f"• Website: {', '.join(contact_info['websites'])}")
         
         if contact_info["addresses"]:
-            contact_str += f"- Addresses: {'; '.join(contact_info['addresses'])}\n"
-    
-    # Create an enhanced prompt with structured awareness
-    prompt = f"""
-    Answer this question: {question}
-    
-    {category_str}
-    {contact_str}
-    
-    Use only this information:
-    {formatted_context}
-    
-    If the information contains provider details relevant to the question, include the provider names and contact details in your answer.
-    Format any contact information clearly and make it easy to read.
-    Do not ask follow-up questions. Simply provide the most relevant information you can find.
-    """
-
-    try:
-        # Increase max length to allow for provider details
-        response = generator(
-            prompt,
-            max_length=250,  # Longer for provider listings
-            num_return_sequences=1,
-            do_sample=False
-        )
+            response_parts.append(f"• Address: {contact_info['addresses'][0]}")
         
-        # Get response text
-        answer_text = response[0]['generated_text'].strip()
-        
-        # Check for follow-up questions or very short answers
-        if "what is" in answer_text.lower() or "who is" in answer_text.lower() or len(answer_text) < 15:
-            # Create a structured response from the raw context
-            response_parts = []
-            
-            # Add categories if available
-            if all_categories:
-                response_parts.append(f"Categories: {', '.join(all_categories)}")
-                response_parts.append("")  # Empty line
-            
-            # Add contact information if available
-            if any(contact_info.values()):
-                response_parts.append("Contact Information:")
-                
-                if contact_info["emails"]:
-                    response_parts.append(f"Email: {', '.join(contact_info['emails'])}")
-                
-                if contact_info["phones"]:
-                    response_parts.append(f"Phone: {', '.join(contact_info['phones'])}")
-                
-                if contact_info["websites"]:
-                    response_parts.append(f"Website: {', '.join(contact_info['websites'])}")
-                
-                if contact_info["addresses"]:
-                    response_parts.append(f"Address: {'; '.join(contact_info['addresses'])}")
-                
-                response_parts.append("")  # Empty line
-            
-            # Format the context into a clean response
-            response_parts.append("Description:")
-            for chunk in context_chunks:
-                # Extract description sections from normalized data
-                if "DESCRIPTION:" in chunk:
-                    desc_start = chunk.find("DESCRIPTION:")
-                    description = chunk[desc_start:].replace("DESCRIPTION:", "").strip()
-                    response_parts.append(description)
-                else:
-                    # For non-normalized data, just add the content
-                    lines = chunk.split('\n')
-                    for line in lines:
-                        if line.strip() and not any(header in line for header in ["CATEGORIES:", "CONTACT INFORMATION:"]):
-                            response_parts.append(line.strip())
-            
-            # Join with line breaks for readability
-            structured_response = "\n".join(response_parts)
-            return structured_response
-            
-        return answer_text
-        
-    except Exception as e:
-        print(f"Error in generate_answer: {str(e)}")
-        # Provide raw context as fallback
-        return "\n".join([chunk for chunk in context_chunks])
+        response_parts.append("")
+    
+    # Add provider information
+    providers = []
+    for chunk in context_chunks:
+        if "PROVIDER:" in chunk:
+            provider = chunk.split("PROVIDER:")[1].split('\n')[0].strip()
+            if provider and provider not in providers:
+                providers.append(provider)
+    
+    if providers:
+        response_parts.append("**Provider(s):**")
+        response_parts.append(f"• {', '.join(providers)}")
+        response_parts.append("")
+    
+    # Add description from chunks
+    descriptions = []
+    for chunk in context_chunks:
+        if "DESCRIPTION:" in chunk:
+            desc = chunk.split("DESCRIPTION:")[1].strip()
+            descriptions.append(desc)
+        else:
+            # Clean chunk content
+            lines = [line.strip() for line in chunk.split('\n') 
+                    if line.strip() and not any(h in line for h in ["CATEGORIES:", "CONTACT INFORMATION:", "PROVIDER:"])]
+            if lines:
+                descriptions.append(' '.join(lines))
+    
+    if descriptions:
+        response_parts.append("**Description:**")
+        response_parts.append(descriptions[0][:200] + "..." if len(descriptions[0]) > 200 else descriptions[0])
+    
+    return "\n".join(response_parts)

@@ -1,6 +1,8 @@
 import streamlit as st
 from upload import upload_page
+from upload_workflow import upload_workflow_page
 from query import query_page
+from document_manager import document_manager_page
 import asyncio
 import nest_asyncio
 import sys
@@ -28,8 +30,10 @@ st.set_page_config(
 # Error handling wrapper
 try:
     pages = {
-        "Upload PDF": upload_page,
-        "Ask a Question": query_page
+        "📁 Upload Workflow": upload_workflow_page,
+        "📄 Upload (Simple)": upload_page,
+        "🔍 Ask a Question": query_page,
+        "📚 Document Manager": document_manager_page
     }
 
     st.sidebar.title("Navigation")

@@ -13,3 +13,7 @@ spacy
 scikit-learn
 fuzzywuzzy
 python-Levenshtein
+openpyxl
+# Dependencies for Mixtral-8x7B-Instruct
+bitsandbytes>=0.41.0
+accelerate>=0.20.0
