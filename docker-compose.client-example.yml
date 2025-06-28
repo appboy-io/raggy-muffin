@@ -1,0 +1,75 @@
+# Example client-specific override file
+# Copy this file to docker-compose.override.yml and customize for each client
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.client-example.yml up
+
+services:
+  app:
+    environment:
+      # =============================================================================
+      # CLIENT-SPECIFIC WHITE LABEL CONFIGURATION
+      # =============================================================================
+      
+      # App Branding - Customize for each client
+      APP_NAME: "DocumentIQ Pro"
+      APP_ICON: "📚"
+      APP_TAGLINE: "Unlock Insights from Your Legal Documents"
+      APP_DESCRIPTION: "Built for legal professionals. Upload contracts, cases, and legal documents to get instant answers with precise citations and references."
+      
+      # Pricing Configuration
+      STARTER_PLAN_PRICE: "$49"
+      STARTER_PLAN_PERIOD: "month"
+      FREE_TRIAL_DAYS: "7"
+      STARTER_PLAN_PAGES: "2,000"
+      
+      # Color Theme - Match client branding
+      PRIMARY_COLOR: "#1a472a"  # Dark green for legal
+      SECONDARY_COLOR: "#4a5568"
+      ACCENT_COLOR: "#f7fafc"
+      
+      # Company Information
+      COMPANY_NAME: "LegalTech Solutions Inc."
+      SUPPORT_EMAIL: "support@documentiq.com"
+      WEBSITE_URL: "https://documentiq.com"
+      
+      # Features - Customized for legal industry
+      FEATURE_1_TITLE: "Instant Legal Research"
+      FEATURE_1_ICON: "⚖️"
+      FEATURE_1_DESC: "Upload legal documents and get instant answers to complex legal questions with precise citations."
+      FEATURE_1_QUOTE: "I can research hundreds of cases in minutes instead of hours"
+      
+      FEATURE_2_TITLE: "Attorney-Client Privilege Protected"
+      FEATURE_2_ICON: "🔐"
+      FEATURE_2_DESC: "Bank-level security ensures your confidential legal documents remain protected and private."
+      FEATURE_2_QUOTE: "Finally, a solution that meets our strict confidentiality requirements"
+      
+      FEATURE_3_TITLE: "Transparent Legal Billing"
+      FEATURE_3_ICON: "💼"
+      FEATURE_3_DESC: "Pay per document processed. No hidden fees, perfect for tracking billable hours."
+      FEATURE_3_QUOTE: "More efficient than junior associates at a fraction of the cost"
+      
+      # Testimonials - Legal industry specific
+      TESTIMONIAL_1_TEXT: "DocumentIQ Pro revolutionized our contract review process. What used to take our team days now takes hours, with better accuracy and comprehensive citations."
+      TESTIMONIAL_1_AUTHOR: "Sarah Mitchell, Esq."
+      TESTIMONIAL_1_TITLE: "Senior Partner, Mitchell & Associates"
+      
+      TESTIMONIAL_2_TEXT: "As a solo practitioner, I need fast access to legal precedents. DocumentIQ Pro helps me compete with larger firms by giving me instant research capabilities."
+      TESTIMONIAL_2_AUTHOR: "Robert Chen"
+      TESTIMONIAL_2_TITLE: "Solo Practitioner, Chen Law Office"
+      
+      # Social Proof
+      SOCIAL_PROOF_TEXT: "Trusted by over 500 law firms and legal professionals nationwide"
+      
+      # CTA Configuration
+      CTA_PRIMARY_TEXT: "START LEGAL TRIAL"
+      CTA_SECONDARY_TEXT: "TRY FREE FOR 7 DAYS"
+      CTA_TRIAL_TEXT: "Start your 7-day free trial - no commitment required"
+      
+      # Streamlit Configuration
+      STREAMLIT_PAGE_TITLE: "DocumentIQ Pro - Legal Document Analysis Platform"
+      STREAMLIT_PAGE_ICON: "📚"
+      
+      # AWS Cognito Configuration - Each client needs their own
+      AWS_COGNITO_USER_POOL_ID: "us-east-1_XXXXXXXXX"
+      AWS_COGNITO_CLIENT_ID: "your_client_specific_id"
+      AWS_COGNITO_CLIENT_SECRET: "your_client_specific_secret"
+      AWS_REGION: "us-east-1"
