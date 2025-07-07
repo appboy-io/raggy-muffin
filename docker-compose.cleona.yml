@@ -163,8 +163,6 @@ services:
       USE_CASES: Medical information lookup, Healthcare provider search, Government benefit eligibility, Housing assistance finder, Food program locator
       STARTER_PLAN_FEATURES: 500 queries/month|Unlimited medical Q&A|Government resource finder|Healthcare provider directory|Email support
       TRIAL_BENEFITS: Government resource matching|Healthcare provider search|Application assistance|Priority support|All features unlocked for 7 days
-    depends_on:
-      - db
     volumes:
       - ./app:/app
 
