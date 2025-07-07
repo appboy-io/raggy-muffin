@@ -23,15 +23,13 @@ services:
       - db
     volumes:
       - ./api:/app  # Mount for hot reload
+    env_file:
+      - .env.dev
     environment:
       # Database Configuration
       DATABASE_URL: postgresql://dev_user:dev_pass@db:5432/dev_db
       
-      # AWS Cognito Configuration
-      AWS_COGNITO_USER_POOL_ID: us-east-1_71Kh5N8ZZ
-      AWS_COGNITO_CLIENT_ID: 1q4v64geie9vs13fm224vkjbv2
-      AWS_COGNITO_CLIENT_SECRET: iiekk514434gskteft5mrvoud0cl0hd19itfnnaek56b40edi2a
-      AWS_REGION: us-east-1
+      # AWS Cognito loaded from .env.dev
       
       # Development Branding - SmartAssist Solutions
       BRAND_NAME: "SmartAssist Solutions"
@@ -83,6 +81,8 @@ services:
       - api
     volumes:
       - ./app:/app  # Mount for hot reload
+    env_file:
+      - .env.dev
     environment:
       # Database Configuration
       DB_CONN: postgresql://dev_user:dev_pass@db:5432/dev_db
@@ -110,11 +110,7 @@ services:
       SUPPORT_EMAIL: "support@smartassist.ai"
       WEBSITE_URL: "https://smartassist.ai"
       
-      # AWS Cognito Configuration
-      AWS_COGNITO_USER_POOL_ID: us-east-1_71Kh5N8ZZ
-      AWS_COGNITO_CLIENT_ID: 1q4v64geie9vs13fm224vkjbv2
-      AWS_COGNITO_CLIENT_SECRET: iiekk514434gskteft5mrvoud0cl0hd19itfnnaek56b40edi2a
-      AWS_REGION: us-east-1
+      # AWS Cognito loaded from .env.dev
       
       # Domains
       ADMIN_DOMAIN: http://localhost:3000

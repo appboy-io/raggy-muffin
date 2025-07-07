@@ -21,15 +21,13 @@ services:
       - "8004:8000"
     depends_on:
       - db
+    env_file:
+      - .env.cleona
     environment:
       # Database Configuration
       DATABASE_URL: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
       
-      # AWS Cognito Configuration
-      AWS_COGNITO_USER_POOL_ID: us-east-1_71Kh5N8ZZ
-      AWS_COGNITO_CLIENT_ID: 1q4v64geie9vs13fm224vkjbv2
-      AWS_COGNITO_CLIENT_SECRET: iiekk514434gskteft5mrvoud0cl0hd19itfnnaek56b40edi2a
-      AWS_REGION: us-east-1
+      # AWS Cognito loaded from .env.cleona
       
       # Cleona Branding Configuration
       BRAND_NAME: Cleona
@@ -39,8 +37,8 @@ services:
       
       # Domains
       WIDGET_DOMAIN: http://localhost:3001
-      ADMIN_DOMAIN: http://localhost:3000
-      CORS_ORIGINS: http://localhost:3000,http://localhost:3001,http://localhost:8503
+      ADMIN_DOMAIN: http://localhost:3004
+      CORS_ORIGINS: http://localhost:3004,http://localhost:3001,http://localhost:8503
       
       # Feature Limits
       MAX_DOCUMENTS_PER_TENANT: 100
@@ -74,6 +72,8 @@ services:
     depends_on:
       - db
       - api
+    env_file:
+      - .env.cleona
     environment:
       # Database Configuration
       DB_CONN: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
@@ -101,11 +101,7 @@ services:
       SUPPORT_EMAIL: support@cleona.ai
       WEBSITE_URL: https://cleona.ai
       
-      # AWS Cognito Configuration
-      AWS_COGNITO_USER_POOL_ID: us-east-1_71Kh5N8ZZ
-      AWS_COGNITO_CLIENT_ID: 1q4v64geie9vs13fm224vkjbv2
-      AWS_COGNITO_CLIENT_SECRET: iiekk514434gskteft5mrvoud0cl0hd19itfnnaek56b40edi2a
-      AWS_REGION: us-east-1
+      # AWS Cognito loaded from .env.cleona
       
       # Features
       FEATURE_1_TITLE: Medical Information Access
