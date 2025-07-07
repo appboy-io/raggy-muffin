@@ -6,6 +6,7 @@ from embedding import chunk_text, embed_chunks
 from db import insert_embeddings
 from extraction import extract_structured_data, normalize_text
 from llm_extraction import extract_structured_data_llm
+from auth import CognitoAuth
 
 def extract_pdf_text(pdf_file):
     """Extract text from a PDF file"""
@@ -69,8 +70,20 @@ def extract_text_file(text_file):
 
 def upload_page():
     st.title("📄 Upload Documents")
-
-    tenant_id = st.text_input("Tenant ID", "default_tenant")
+    
+    # Require authentication
+    auth = CognitoAuth()
+    if not auth.is_authenticated():
+        st.warning("🔒 Please log in to upload documents.")
+        st.info("👈 Use the navigation sidebar to sign in or create an account.")
+        return
+    
+    # Get tenant ID from authenticated user
+    tenant_id = auth.get_tenant_id()
+    username = st.session_state.get('username', 'Unknown')
+    
+    st.info(f"👤 **Logged in as:** {username}")
+    st.info(f"🏢 **Uploading to workspace:** {tenant_id[:8]}...")
     
     file_type = st.radio("Select file type:", ["PDF", "CSV", "Excel", "Text"])
     

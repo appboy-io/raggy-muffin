@@ -52,7 +52,17 @@ def login_page():
                 if result["success"]:
                     st.success(result["message"])
                     st.balloons()
-                    st.rerun()
+                    # Redirect to admin dashboard after successful login
+                    st.success("🎉 Login successful! Redirecting to your dashboard...")
+                    st.markdown(f"""
+                    <script>
+                    setTimeout(function() {{
+                        window.open('{config.ADMIN_DOMAIN}', '_blank');
+                    }}, 2000);
+                    </script>
+                    """, unsafe_allow_html=True)
+                    st.info(f"If the redirect doesn't work, click here: [{config.ADMIN_DOMAIN}]({config.ADMIN_DOMAIN})")
+                    return
                 else:
                     st.error(f"Login failed: {result['message']}")
             else:

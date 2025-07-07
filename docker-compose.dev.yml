@@ -1,0 +1,202 @@
+services:
+  db:
+    image: ankane/pgvector
+    container_name: dev_pgvector
+    restart: always
+    environment:
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_pass
+      POSTGRES_DB: dev_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - dev_pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  api:
+    build: ./api
+    container_name: dev_api
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./api:/app  # Mount for hot reload
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql://dev_user:dev_pass@db:5432/dev_db
+      
+      # AWS Cognito Configuration
+      AWS_COGNITO_USER_POOL_ID: us-east-1_71Kh5N8ZZ
+      AWS_COGNITO_CLIENT_ID: 1q4v64geie9vs13fm224vkjbv2
+      AWS_COGNITO_CLIENT_SECRET: iiekk514434gskteft5mrvoud0cl0hd19itfnnaek56b40edi2a
+      AWS_REGION: us-east-1
+      
+      # Development Branding - SmartAssist Solutions
+      BRAND_NAME: "SmartAssist Solutions"
+      BRAND_LOGO: "🧠"
+      PRIMARY_COLOR: "#6366f1"
+      SECONDARY_COLOR: "#64748b"
+      
+      # Domains
+      WIDGET_DOMAIN: http://localhost:3001
+      ADMIN_DOMAIN: http://localhost:3000
+      API_BASE_URL: http://localhost:8000
+      CORS_ORIGINS: "*"  # Allow all origins in dev
+      
+      # Feature Limits (generous for dev)
+      MAX_DOCUMENTS_PER_TENANT: 1000
+      MAX_QUERIES_PER_DAY: 10000
+      MAX_FILE_SIZE_MB: 100
+      
+      # Security (dev settings)
+      SECRET_KEY: dev-secret-key-not-for-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440  # 24 hours for dev convenience
+
+  admin-ui:
+    build: ./admin-ui
+    container_name: dev_admin_ui
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./admin-ui:/app  # Mount for hot reload
+      - /app/node_modules  # Prevent overwriting node_modules
+    environment:
+      REACT_APP_API_URL: http://localhost:8000
+      REACT_APP_BRAND_NAME: "SmartAssist Solutions"
+      REACT_APP_BRAND_LOGO: "🧠"
+      REACT_APP_PRIMARY_COLOR: "#6366f1"
+      REACT_APP_SECONDARY_COLOR: "#64748b"
+
+  website:
+    build: .
+    container_name: dev_website
+    restart: always
+    ports:
+      - "3002:8501"
+    depends_on:
+      - db
+      - api
+    volumes:
+      - ./app:/app  # Mount for hot reload
+    environment:
+      # Database Configuration
+      DB_CONN: postgresql://dev_user:dev_pass@db:5432/dev_db
+      DATABASE_URL: postgresql://dev_user:dev_pass@db:5432/dev_db
+      
+      # SmartAssist Solutions Branding Configuration
+      APP_NAME: "SmartAssist Solutions"
+      APP_ICON: "🧠"
+      APP_TAGLINE: "Intelligent AI Assistants for Every Business"
+      APP_DESCRIPTION: "Transform your business with custom AI assistants. Upload your documents, train your AI, and deploy intelligent chat widgets on your website instantly."
+      
+      # Pricing Configuration
+      STARTER_PLAN_PRICE: "$49"
+      STARTER_PLAN_PERIOD: "month"
+      FREE_TRIAL_DAYS: "14"
+      STARTER_PLAN_PAGES: "1000"
+      
+      # Color Theme (Tech/Business focused)
+      PRIMARY_COLOR: "#6366f1"
+      SECONDARY_COLOR: "#64748b"
+      ACCENT_COLOR: "#f1f5f9"
+      
+      # Company Information
+      COMPANY_NAME: "SmartAssist Solutions Inc."
+      SUPPORT_EMAIL: "support@smartassist.ai"
+      WEBSITE_URL: "https://smartassist.ai"
+      
+      # AWS Cognito Configuration
+      AWS_COGNITO_USER_POOL_ID: us-east-1_71Kh5N8ZZ
+      AWS_COGNITO_CLIENT_ID: 1q4v64geie9vs13fm224vkjbv2
+      AWS_COGNITO_CLIENT_SECRET: iiekk514434gskteft5mrvoud0cl0hd19itfnnaek56b40edi2a
+      AWS_REGION: us-east-1
+      
+      # Domains
+      ADMIN_DOMAIN: http://localhost:3000
+      API_BASE_URL: http://localhost:8000
+      WEBSITE_DOMAIN: http://localhost:3002
+      
+      # Features
+      FEATURE_1_TITLE: "Custom AI Training"
+      FEATURE_1_ICON: "📚"
+      FEATURE_1_DESC: "Upload your documents and train AI assistants that understand your business inside and out."
+      FEATURE_1_QUOTE: "Our AI assistant knows our product catalog better than most employees"
+      
+      FEATURE_2_TITLE: "Embeddable Chat Widgets"
+      FEATURE_2_ICON: "💬"
+      FEATURE_2_DESC: "Deploy intelligent chat widgets on your website with just one line of code."
+      FEATURE_2_QUOTE: "Customer satisfaction increased 40% after adding SmartAssist to our site"
+      
+      FEATURE_3_TITLE: "Enterprise Security"
+      FEATURE_3_ICON: "🔒"
+      FEATURE_3_DESC: "Bank-level security with tenant isolation and domain restrictions for your data."
+      FEATURE_3_QUOTE: "We trust SmartAssist with our most sensitive business information"
+      
+      # Testimonials
+      TESTIMONIAL_1_TEXT: "SmartAssist transformed our customer support. Our AI assistant handles 80% of inquiries automatically, and our team focuses on complex issues."
+      TESTIMONIAL_1_AUTHOR: "Sarah Chen"
+      TESTIMONIAL_1_TITLE: "CTO, TechFlow Inc."
+      
+      TESTIMONIAL_2_TEXT: "Implementation was seamless. Within a week, we had an AI assistant that knew our entire product catalog and was helping customers 24/7."
+      TESTIMONIAL_2_AUTHOR: "Marcus Rodriguez"
+      TESTIMONIAL_2_TITLE: "Operations Director, RetailMax"
+      
+      # Social Proof
+      SOCIAL_PROOF_TEXT: "Trusted by 500+ businesses to power their AI assistants"
+      
+      # CTA Configuration
+      CTA_PRIMARY_TEXT: "START FREE TRIAL"
+      CTA_SECONDARY_TEXT: "GET STARTED NOW"
+      CTA_TRIAL_TEXT: "Start your 14-day free trial"
+      
+      # Streamlit Configuration
+      STREAMLIT_PAGE_TITLE: "SmartAssist Solutions - AI Assistants for Business"
+      STREAMLIT_PAGE_ICON: "🧠"
+      STREAMLIT_LAYOUT: "wide"
+      
+      # How It Works Steps
+      STEP_1_TITLE: "Upload Documents"
+      STEP_1_DESC: "Add your business documents and knowledge base"
+      STEP_1_DETAILS: "- Product catalogs and manuals\\n- FAQ documents\\n- Training materials\\n- Company policies"
+      
+      STEP_2_TITLE: "AI Training"
+      STEP_2_DESC: "Our AI learns your business knowledge"
+      STEP_2_DETAILS: "- Document processing\\n- Semantic understanding\\n- Knowledge extraction\\n- Context mapping"
+      
+      STEP_3_TITLE: "Customize Widget"
+      STEP_3_DESC: "Design your chat assistant appearance"
+      STEP_3_DETAILS: "- Brand colors and styling\\n- Welcome messages\\n- Response personality\\n- Domain restrictions"
+      
+      STEP_4_TITLE: "Deploy & Scale"
+      STEP_4_DESC: "Embed on your website and monitor performance"
+      STEP_4_DETAILS: "- One-line code integration\\n- Real-time analytics\\n- Performance monitoring\\n- Continuous improvement"
+      
+      # Features and Benefits
+      SUPPORTED_FORMATS: "PDF documents, Word files, Excel spreadsheets, Text files, Web pages"
+      USE_CASES: "Customer support automation, Product recommendations, FAQ assistance, Lead qualification, Technical support"
+      STARTER_PLAN_FEATURES: "1000 queries/month|Custom AI training|Embeddable widgets|Analytics dashboard|Email support"
+      TRIAL_BENEFITS: "Full feature access|Unlimited document uploads|Custom branding|Priority support|All integrations unlocked for 14 days"
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+
+  super-admin-ui:
+    build: ./super-admin-ui
+    container_name: dev_super_admin_ui
+    restart: always
+    ports:
+      - "3003:3003"
+    depends_on:
+      - api
+    volumes:
+      - ./super-admin-ui:/app  # Mount for hot reload
+      - /app/node_modules  # Prevent overwriting node_modules
+    environment:
+      REACT_APP_API_URL: http://localhost:8000
+      REACT_APP_BRAND_NAME: "SmartAssist Solutions"
+
+volumes:
+  dev_pgdata:

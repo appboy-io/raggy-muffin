@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from db import engine
 from sqlalchemy import text
+from auth import CognitoAuth
 import json
 
 def document_manager_page():
@@ -9,8 +10,19 @@ def document_manager_page():
     st.title("📚 Document Manager")
     st.write("View and manage your uploaded documents and their processing status.")
     
-    # Tenant selector
-    tenant_id = st.text_input("Tenant ID", "default_tenant")
+    # Require authentication
+    auth = CognitoAuth()
+    if not auth.is_authenticated():
+        st.warning("🔒 Please log in to manage documents.")
+        st.info("👈 Use the navigation sidebar to sign in or create an account.")
+        return
+    
+    # Get tenant ID from authenticated user
+    tenant_id = auth.get_tenant_id()
+    username = st.session_state.get('username', 'Unknown')
+    
+    st.info(f"👤 **Logged in as:** {username}")
+    st.info(f"🏢 **Managing workspace:** {tenant_id[:8]}...")
     
     if st.button("Load Documents", type="primary"):
         load_document_data(tenant_id)

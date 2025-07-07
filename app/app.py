@@ -1,5 +1,4 @@
 import streamlit as st
-from upload import upload_page
 from upload_workflow import upload_workflow_page
 from query import query_page
 from document_manager import document_manager_page
@@ -24,16 +23,20 @@ try:
 except Exception as e:
     st.error(f"Error setting up asyncio: {e}")
 
-# App configuration
+# App configuration - optimized for performance
 st.set_page_config(
     page_title=config.STREAMLIT_PAGE_TITLE,
     page_icon=config.STREAMLIT_PAGE_ICON,
     layout=config.STREAMLIT_LAYOUT,
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"  # Faster initial load
 )
 
-# Configure file upload limits
+# Configure file upload limits and performance settings
 st.session_state.setdefault('max_upload_size', 200)  # 200MB default
+
+# Performance optimizations
+if 'performance_initialized' not in st.session_state:
+    st.session_state.performance_initialized = True
 
 # Initialize authentication
 auth = CognitoAuth()
@@ -50,7 +53,6 @@ try:
     # Define protected pages (authentication required)
     protected_pages = {
         "📁 Upload Workflow": upload_workflow_page,
-        "📄 Upload (Simple)": upload_page,
         "🔍 Ask a Question": query_page,
         "📚 Document Manager": document_manager_page
     }

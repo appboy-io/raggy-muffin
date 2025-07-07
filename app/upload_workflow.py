@@ -6,16 +6,26 @@ from embedding import chunk_text, embed_chunks
 from db import insert_embeddings
 from extraction import extract_structured_data, normalize_text
 from llm_extraction import extract_structured_data_llm
+from auth import CognitoAuth
 import time
 
 def upload_workflow_page():
     """Main upload workflow with paginated onboarding-style interface"""
+    
+    # Require authentication
+    auth = CognitoAuth()
+    if not auth.is_authenticated():
+        st.warning("🔒 Please log in to upload documents.")
+        st.info("👈 Use the navigation sidebar to sign in or create an account.")
+        return
     
     # Initialize session state for workflow
     if 'workflow_step' not in st.session_state:
         st.session_state.workflow_step = 1
     if 'workflow_data' not in st.session_state:
         st.session_state.workflow_data = {}
+        # Automatically set tenant ID from authenticated user
+        st.session_state.workflow_data['tenant_id'] = auth.get_tenant_id()
     
     # Progress bar
     total_steps = 5
@@ -43,13 +53,12 @@ def step_1_upload():
     st.title("📁 Upload Your Document")
     st.write("Select and upload the document you want to process for your knowledge base.")
     
-    # Tenant ID input
-    tenant_id = st.text_input(
-        "Organization/Tenant ID", 
-        value=st.session_state.workflow_data.get('tenant_id', 'default_tenant'),
-        help="Unique identifier for your organization or project"
-    )
-    st.session_state.workflow_data['tenant_id'] = tenant_id
+    # Show current user and tenant info
+    tenant_id = st.session_state.workflow_data.get('tenant_id')
+    username = st.session_state.get('username', 'Unknown')
+    
+    st.info(f"👤 **Logged in as:** {username}")
+    st.info(f"🏢 **Your workspace:** {tenant_id[:8]}...") # Show first 8 chars of tenant ID for privacy
     
     # File upload with auto-detection
     st.info("📄 **Supported Formats:** PDF documents, CSV/Excel spreadsheets, and text files (TXT, MD, RST)")

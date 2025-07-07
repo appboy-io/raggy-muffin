@@ -35,23 +35,32 @@ class CognitoAuth:
     def sign_up(self, username, password, email):
         """Register a new user"""
         try:
+            print(f"DEBUG: Attempting signup for user: {username}, email: {email}")
+            print(f"DEBUG: Using pool: {self.user_pool_id}, client: {self.client_id}")
+            
             cognito = Cognito(
                 user_pool_id=self.user_pool_id,
                 client_id=self.client_id,
                 client_secret=self.client_secret,
-                username=username,
+                username=username,  # Use the actual username
                 user_pool_region=self.region
             )
             
+            # Register with username but set email attribute
+            cognito.set_base_attributes(email=email)
             result = cognito.register(
                 username=username,
                 password=password,
-                email=email
+                attr_map={
+                    'email': email
+                }
             )
             
+            print(f"DEBUG: Registration result: {result}")
             return {"success": True, "message": "Registration successful! Please check your email for verification."}
             
         except Exception as e:
+            print(f"DEBUG: Registration error: {str(e)}")
             return {"success": False, "message": str(e)}
     
     def confirm_sign_up(self, username, confirmation_code):
@@ -74,6 +83,9 @@ class CognitoAuth:
     def sign_in(self, username, password):
         """Authenticate user"""
         try:
+            print(f"DEBUG: Attempting login for user: {username}")
+            print(f"DEBUG: Using pool: {self.user_pool_id}, client: {self.client_id}")
+            
             cognito = Cognito(
                 user_pool_id=self.user_pool_id,
                 client_id=self.client_id,
@@ -82,14 +94,49 @@ class CognitoAuth:
                 user_pool_region=self.region
             )
             
+            print(f"DEBUG: About to authenticate...")
             cognito.authenticate(password=password)
+            print(f"DEBUG: Authentication successful")
+            
+            # Get user ID from Cognito token to use as tenant ID
+            try:
+                user_info = cognito.get_user()
+                print(f"DEBUG: User info: {user_info}")
+                
+                # Extract user ID - try different possible locations
+                user_id = None
+                if isinstance(user_info, dict):
+                    # Try direct access first
+                    user_id = user_info.get('sub') or user_info.get('username')
+                    
+                    # Try UserAttributes if it exists
+                    if not user_id and 'UserAttributes' in user_info:
+                        for attr in user_info['UserAttributes']:
+                            if attr.get('Name') == 'sub':
+                                user_id = attr.get('Value')
+                                break
+                
+                print(f"DEBUG: Extracted user_id: {user_id}")
+                
+                # Fallback to username if no user_id found
+                if not user_id:
+                    user_id = username
+                    print(f"DEBUG: Using username as fallback user_id: {user_id}")
+                
+            except Exception as e:
+                print(f"DEBUG: Error getting user info: {e}")
+                user_id = username  # Fallback to username
             
             # Store authentication state
             st.session_state.authenticated = True
             st.session_state.username = username
+            st.session_state.user_id = user_id
+            st.session_state.tenant_id = user_id  # Use Cognito user ID as tenant ID
             st.session_state.access_token = cognito.access_token
             st.session_state.id_token = cognito.id_token
             st.session_state.refresh_token = cognito.refresh_token
+            
+            print(f"DEBUG: Session state set - authenticated: {st.session_state.authenticated}, tenant_id: {st.session_state.tenant_id}")
             
             return {"success": True, "message": "Login successful!", "user": cognito}
             
@@ -110,7 +157,7 @@ class CognitoAuth:
                 cognito.logout()
             
             # Clear session state
-            keys_to_clear = ['authenticated', 'username', 'access_token', 'id_token', 'refresh_token']
+            keys_to_clear = ['authenticated', 'username', 'user_id', 'tenant_id', 'access_token', 'id_token', 'refresh_token']
             for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]
@@ -122,7 +169,10 @@ class CognitoAuth:
     
     def is_authenticated(self):
         """Check if user is authenticated"""
-        return st.session_state.get('authenticated', False)
+        is_auth = st.session_state.get('authenticated', False)
+        print(f"DEBUG: is_authenticated() called - result: {is_auth}")
+        print(f"DEBUG: Session state keys: {list(st.session_state.keys())}")
+        return is_auth
     
     def get_user_info(self):
         """Get current user information"""
@@ -143,6 +193,10 @@ class CognitoAuth:
         except Exception as e:
             st.error(f"Error getting user info: {e}")
             return None
+    
+    def get_tenant_id(self):
+        """Get the current user's tenant ID (Cognito user ID)"""
+        return st.session_state.get('tenant_id', None)
     
     def forgot_password(self, username):
         """Initiate password reset"""

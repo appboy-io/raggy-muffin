@@ -98,7 +98,7 @@ def signup_page():
                             del st.session_state.pending_username
                         
                         # Auto-redirect to login
-                        st.info("Redirecting you to sign in...")
+                        st.info("🎉 Account verified! Redirecting you to sign in...")
                         st.session_state.selected_page = "🔐 Sign In"
                         st.rerun()
                     else:

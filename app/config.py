@@ -78,6 +78,11 @@ class AppConfig:
         self.SECONDARY_COLOR = os.getenv('SECONDARY_COLOR', '#666666')
         self.ACCENT_COLOR = os.getenv('ACCENT_COLOR', '#f9f9f9')
         
+        # Domains
+        self.ADMIN_DOMAIN = os.getenv('ADMIN_DOMAIN', 'http://localhost:3000')
+        self.API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000')
+        self.WEBSITE_DOMAIN = os.getenv('WEBSITE_DOMAIN', 'http://localhost:3002')
+        
         # CTA Buttons
         self.CTA_PRIMARY_TEXT = os.getenv('CTA_PRIMARY_TEXT', 'GET STARTED FREE')
         self.CTA_SECONDARY_TEXT = os.getenv('CTA_SECONDARY_TEXT', 'START FREE TRIAL')

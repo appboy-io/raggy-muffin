@@ -1,25 +1,27 @@
-from embedding import embedder
+from embedding import get_embedder
 from db import engine
 from sqlalchemy import text
 from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 from categories import category_manager
+import streamlit as st
 import re
 
-# Use a smaller model and explicit tokenizer to better handle context length
-model_name = "google/flan-t5-small"  # Use smaller model
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-
-# Simple pipeline with HuggingFace
-device = "cpu"  # Use CPU to avoid CUDA issues
-generator = pipeline(
-    "text2text-generation",  # Use text2text instead of text-generation
-    model=model,
-    tokenizer=tokenizer,
-    device=device,
-    max_length=512  # Increase to handle longer sequences
-)
+@st.cache_resource
+def get_generator():
+    """Lazy loading of text generation model with caching"""
+    model_name = "google/flan-t5-small"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+    
+    device = "cpu"
+    return pipeline(
+        "text2text-generation",
+        model=model,
+        tokenizer=tokenizer,
+        device=device,
+        max_length=512
+    )
 
 def detect_category_in_query(query):
     """Detect potential aid categories in the query"""
@@ -52,6 +54,12 @@ def detect_category_in_query(query):
     # Return unique categories
     return list(set(categories))
 
+@st.cache_data(ttl=1800)
+def cached_embed_query(query):
+    """Cache query embeddings for 30 minutes"""
+    embedder = get_embedder()
+    return embedder.encode([query], normalize_embeddings=True)[0].tolist()
+
 def retrieve_relevant_chunks(query, tenant_id, top_k=4):
     """Retrieve provider information chunks with improved context and category awareness"""
     
@@ -72,7 +80,7 @@ def retrieve_relevant_chunks(query, tenant_id, top_k=4):
         enhanced_query = f"Provider information for {query}"
     
     # Get embeddings for the enhanced query
-    query_emb = embedder.encode([enhanced_query], normalize_embeddings=True)[0].tolist()
+    query_emb = cached_embed_query(enhanced_query)
     
     try:
         with engine.connect() as conn:
@@ -102,7 +110,7 @@ def retrieve_relevant_chunks(query, tenant_id, top_k=4):
                 
                 # Get embeddings for each category query
                 if category_queries:
-                    cat_embs = embedder.encode(category_queries, normalize_embeddings=True)
+                    cat_embs = [cached_embed_query(cq) for cq in category_queries]
                     cat_chunks = []
                     
                     # Query for each category embedding
@@ -115,7 +123,7 @@ def retrieve_relevant_chunks(query, tenant_id, top_k=4):
                                 ORDER BY embedding <-> (:query_emb)::vector
                                 LIMIT 2
                             """),
-                            {"tenant": tenant_id, "query_emb": cat_emb.tolist(), "top_k": 2}
+                            {"tenant": tenant_id, "query_emb": cat_emb, "top_k": 2}
                         )
                         cat_chunks.extend([row[0] for row in cat_result])
                     
@@ -134,7 +142,7 @@ def retrieve_relevant_chunks(query, tenant_id, top_k=4):
             
             # If we still don't have much information, try the original query as fallback
             if len("".join(chunks)) < 100 and enhanced_query != original_query:
-                orig_emb = embedder.encode([original_query], normalize_embeddings=True)[0].tolist()
+                orig_emb = cached_embed_query(original_query)
                 result = conn.execute(
                     text("""
                         SELECT content

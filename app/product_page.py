@@ -1,5 +1,6 @@
 import streamlit as st
 from config import config
+from auth import CognitoAuth
 
 def product_page():
     # Hero Section
@@ -18,9 +19,17 @@ def product_page():
     # CTA Buttons
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button(f"🚀 {config.CTA_PRIMARY_TEXT}", type="primary", use_container_width=True):
-            st.session_state.selected_page = "📁 Upload Workflow"
-            st.rerun()
+        auth = CognitoAuth()
+        if auth.is_authenticated():
+            # If logged in, go to upload workflow
+            if st.button(f"🚀 {config.CTA_PRIMARY_TEXT}", type="primary", use_container_width=True):
+                st.session_state.selected_page = "📁 Upload Workflow"
+                st.rerun()
+        else:
+            # If not logged in, go to sign up
+            if st.button(f"🚀 {config.CTA_PRIMARY_TEXT}", type="primary", use_container_width=True):
+                st.session_state.selected_page = "📝 Sign Up"
+                st.rerun()
         
         st.markdown(f'<p style="text-align: center; color: {config.SECONDARY_COLOR}; margin-top: 0.5rem;">{config.CTA_TRIAL_TEXT}</p>', unsafe_allow_html=True)
     
@@ -135,9 +144,17 @@ def product_page():
     benefits_text = '<br>'.join([f"✅ {benefit.replace('✅ ', '')}" for benefit in trial_benefits[:3]])
     
     with col2:
-        if st.button(f"🚀 {config.CTA_SECONDARY_TEXT}", type="primary", use_container_width=True):
-            st.session_state.selected_page = "📁 Upload Workflow"
-            st.rerun()
+        auth = CognitoAuth()
+        if auth.is_authenticated():
+            # If logged in, go to upload workflow
+            if st.button(f"🚀 {config.CTA_SECONDARY_TEXT}", type="primary", use_container_width=True):
+                st.session_state.selected_page = "📁 Upload Workflow"
+                st.rerun()
+        else:
+            # If not logged in, go to sign up
+            if st.button(f"🚀 {config.CTA_SECONDARY_TEXT}", type="primary", use_container_width=True):
+                st.session_state.selected_page = "📝 Sign Up"
+                st.rerun()
         
         st.markdown(f"""
         <div style="text-align: center; margin-top: 1rem;">
