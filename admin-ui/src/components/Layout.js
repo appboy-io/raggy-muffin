@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
 import {
@@ -15,12 +15,12 @@ import {
 } from '@heroicons/react/24/outline';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Profile', href: '/profile', icon: UserCircleIcon },
-  { name: 'Documents', href: '/documents', icon: DocumentIcon },
-  { name: 'Chat', href: '/chat', icon: ChatBubbleLeftRightIcon },
-  { name: 'Widgets', href: '/widgets', icon: PuzzlePieceIcon },
-  { name: 'Settings', href: '/settings', icon: CogIcon },
+  { name: 'Dashboard', href: '', icon: HomeIcon },
+  { name: 'Profile', href: 'profile', icon: UserCircleIcon },
+  { name: 'Documents', href: 'documents', icon: DocumentIcon },
+  { name: 'Chat', href: 'chat', icon: ChatBubbleLeftRightIcon },
+  { name: 'Widgets', href: 'widgets', icon: PuzzlePieceIcon },
+  { name: 'Settings', href: 'settings', icon: CogIcon },
 ];
 
 function classNames(...classes) {
@@ -36,7 +36,7 @@ export default function Layout({ children }) {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('login');
   };
 
   return (
@@ -110,7 +110,7 @@ function SidebarContent({ config, location, handleLogout, user }) {
           {navigation.map((item) => {
             const isCurrent = location.pathname === item.href;
             return (
-              <a
+              <Link
                 key={item.name}
                 href={item.href}
                 className={classNames(
@@ -128,7 +128,7 @@ function SidebarContent({ config, location, handleLogout, user }) {
                   )}
                 />
                 {item.name}
-              </a>
+              </Link>
             );
           })}
         </nav>

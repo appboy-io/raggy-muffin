@@ -97,7 +97,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
         <AuthProvider>
-          <Router>
+          <Router basename="/admin">
             <div className="App">
               <AppRoutes />
               <Toaster 

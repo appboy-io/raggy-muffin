@@ -1,18 +1,29 @@
-FROM node:18-alpine
+  FROM node:18-alpine
 
-WORKDIR /app
+  WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+  # Copy package files
+  COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+  # Install dependencies
+  RUN npm install
 
-# Copy source code
-COPY . .
+  # Copy source code
+  COPY . .
+  
+  # Accept build args
+  ARG REACT_APP_API_URL
+  ENV REACT_APP_API_URL=$REACT_APP_API_URL
 
-# Expose port
-EXPOSE 3000
+  # Build for production
+  RUN npm run build
 
-# Start development server
-CMD ["npm", "start"]
+  # Install serve to serve static files
+  RUN npm install -g serve
+
+  # Expose port
+  EXPOSE 3000
+
+  # Serve built files
+  CMD ["serve", "-s", "build", "-l", "3000"]
+

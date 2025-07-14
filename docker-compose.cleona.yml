@@ -50,7 +50,10 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 60
 
   admin-ui:
-    build: ./admin-ui
+    build: 
+      context: ./admin-ui
+      args:
+        REACT_APP_API_URL: https://cleona.ragamuffin.app
     container_name: cleona_admin_ui
     restart: always
     ports:
@@ -58,7 +61,7 @@ services:
     depends_on:
       - api
     environment:
-      REACT_APP_API_URL: http://localhost:8004
+      REACT_APP_API_URL: https://cleona.ragamuffin.app
       REACT_APP_BRAND_NAME: Cleona
       REACT_APP_BRAND_LOGO: "🏥"
       REACT_APP_PRIMARY_COLOR: "#2E8B57"
