@@ -53,7 +53,9 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 1440  # 24 hours for dev convenience
 
   admin-ui:
-    build: ./admin-ui
+    build:
+      context: ./admin-ui
+      dockerfile: Dockerfile.dev
     container_name: dev_admin_ui
     restart: always
     ports:

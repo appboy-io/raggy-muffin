@@ -108,11 +108,11 @@ function SidebarContent({ config, location, handleLogout, user }) {
         {/* Navigation */}
         <nav className="mt-5 flex-1 px-2 space-y-1">
           {navigation.map((item) => {
-            const isCurrent = location.pathname === item.href;
+            const isCurrent = location.pathname === (item.href ? `/${item.href}` : '/');
             return (
               <Link
                 key={item.name}
-                href={item.href}
+                to={item.href ? `/${item.href}` : '/'}
                 className={classNames(
                   isCurrent
                     ? 'bg-gray-100 text-gray-900'
