@@ -1,0 +1,192 @@
+import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useConfig } from '../context/ConfigContext';
+import {
+  HomeIcon,
+  DocumentArrowUpIcon,
+  ChatBubbleLeftRightIcon,
+  ArrowRightOnRectangleIcon,
+  UserIcon,
+  Bars3Icon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
+
+const Layout = ({ children }) => {
+  const location = useLocation();
+  const { user, isAuthenticated, logout } = useAuth();
+  const { config } = useConfig();
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+
+  const navigation = [
+    { name: 'Home', href: '/', icon: HomeIcon },
+    { name: 'Upload', href: '/upload', icon: DocumentArrowUpIcon },
+    { name: 'Chat', href: '/chat', icon: ChatBubbleLeftRightIcon },
+  ];
+
+  const handleLogout = async () => {
+    await logout();
+    setMobileMenuOpen(false);
+  };
+
+  const isActivePath = (path) => {
+    return location.pathname === path;
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Navigation */}
+      <nav className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex">
+              <div className="flex-shrink-0 flex items-center">
+                <Link to="/" className="flex items-center space-x-2">
+                  <span className="text-2xl">{config.brand_logo}</span>
+                  <span className="text-xl font-bold text-gray-900">
+                    {config.brand_name}
+                  </span>
+                </Link>
+              </div>
+              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+                {navigation.map((item) => (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                      isActivePath(item.href)
+                        ? 'border-primary-500 text-gray-900'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <item.icon className="h-4 w-4 mr-1" />
+                    {item.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+            <div className="hidden sm:ml-6 sm:flex sm:items-center">
+              {isAuthenticated ? (
+                <div className="flex items-center space-x-4">
+                  <span className="text-sm text-gray-700">
+                    Welcome, {user?.email || 'User'}
+                  </span>
+                  <button
+                    onClick={handleLogout}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    <ArrowRightOnRectangleIcon className="h-4 w-4 mr-1" />
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-4">
+                  <Link
+                    to="/login"
+                    className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="btn-primary"
+                  >
+                    Register
+                  </Link>
+                </div>
+              )}
+            </div>
+            <div className="-mr-2 flex items-center sm:hidden">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+              >
+                {mobileMenuOpen ? (
+                  <XMarkIcon className="h-6 w-6" />
+                ) : (
+                  <Bars3Icon className="h-6 w-6" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile menu */}
+        {mobileMenuOpen && (
+          <div className="sm:hidden">
+            <div className="pt-2 pb-3 space-y-1">
+              {navigation.map((item) => (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`block pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
+                    isActivePath(item.href)
+                      ? 'bg-primary-50 border-primary-500 text-primary-700'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <item.icon className="h-4 w-4 mr-2" />
+                    {item.name}
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <div className="pt-4 pb-3 border-t border-gray-200">
+              {isAuthenticated ? (
+                <div className="space-y-1">
+                  <div className="flex items-center px-4">
+                    <div className="flex-shrink-0">
+                      <UserIcon className="h-8 w-8 rounded-full text-gray-400" />
+                    </div>
+                    <div className="ml-3">
+                      <div className="text-base font-medium text-gray-800">
+                        {user?.email || 'User'}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                  >
+                    <div className="flex items-center">
+                      <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2" />
+                      Logout
+                    </div>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Link
+                    to="/login"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/register"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                  >
+                    Register
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </nav>
+
+      {/* Main content */}
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default Layout;

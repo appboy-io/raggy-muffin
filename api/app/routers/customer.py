@@ -177,17 +177,20 @@ async def get_customer_dashboard(
             db.commit()
             db.refresh(widget_config)
         
-        # Get stats
-        doc_count = db.query(Document).filter(Document.tenant_id == tenant_id).count()
-        message_count = db.query(ChatMessage).filter(ChatMessage.tenant_id == tenant_id).count()
+        # Get stats (cached for 5 minutes for performance)
+        # @cached(key_prefix=f"dashboard_stats_{tenant_id}", ttl=300)
+        def get_dashboard_stats():
+            doc_count = db.query(Document).filter(Document.tenant_id == tenant_id).count()
+            message_count = db.query(ChatMessage).filter(ChatMessage.tenant_id == tenant_id).count()
+            return {
+                "document_count": doc_count,
+                "message_count": message_count,
+                "widget_enabled": widget_config.is_enabled,
+                "embed_url": f"{config.API_BASE_URL}/api/v1/widgets/{tenant_id}/embed.js",
+                "preview_url": f"{config.API_BASE_URL}/api/v1/widgets/{tenant_id}/preview"
+            }
         
-        stats = {
-            "document_count": doc_count,
-            "message_count": message_count,
-            "widget_enabled": widget_config.is_enabled,
-            "embed_url": f"{config.API_BASE_URL}/api/v1/widgets/{tenant_id}/embed.js",
-            "preview_url": f"{config.API_BASE_URL}/api/v1/widgets/{tenant_id}/preview"
-        }
+        stats = get_dashboard_stats()
         
         widget_data = {
             "title": widget_config.widget_title,

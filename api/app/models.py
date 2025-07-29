@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Text, DateTime, Integer, Boolean, ARRAY, Float
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 from app.database import Base
 import uuid
 
@@ -10,7 +11,7 @@ class Embedding(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String, nullable=False, index=True)
     content = Column(Text, nullable=False)
-    embedding = Column(ARRAY(Float), nullable=True)  # Vector embedding
+    embedding = Column(Vector(768), nullable=True)  # Vector embedding
     meta_data = Column(JSONB, default={})  # Additional metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

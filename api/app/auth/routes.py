@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, status, Header
+from fastapi import APIRouter, HTTPException, status, Header, Request
 from pydantic import BaseModel, EmailStr
 from app.auth.cognito import CognitoAuth
+from app.utils.rate_limit import rate_limit_auth_endpoints
 from typing import Optional
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -33,12 +34,13 @@ class AuthResponse(BaseModel):
     data: Optional[dict] = None
 
 @router.post("/signup", response_model=AuthResponse)
-async def sign_up(request: SignUpRequest):
+@rate_limit_auth_endpoints()
+async def sign_up(signup_request: SignUpRequest, request: Request):
     """Register a new user"""
     result = cognito_auth.sign_up(
-        username=request.username,
-        password=request.password,
-        email=request.email
+        username=signup_request.username,
+        password=signup_request.password,
+        email=signup_request.email
     )
     
     if not result["success"]:
@@ -50,11 +52,11 @@ async def sign_up(request: SignUpRequest):
     return AuthResponse(**result)
 
 @router.post("/confirm-signup", response_model=AuthResponse)
-async def confirm_sign_up(request: ConfirmSignUpRequest):
+async def confirm_sign_up(confirm_request: ConfirmSignUpRequest):
     """Confirm user registration with verification code"""
     result = cognito_auth.confirm_sign_up(
-        username=request.username,
-        confirmation_code=request.confirmation_code
+        username=confirm_request.username,
+        confirmation_code=confirm_request.confirmation_code
     )
     
     if not result["success"]:
@@ -66,11 +68,12 @@ async def confirm_sign_up(request: ConfirmSignUpRequest):
     return AuthResponse(**result)
 
 @router.post("/signin", response_model=AuthResponse)
-async def sign_in(request: SignInRequest):
+@rate_limit_auth_endpoints()
+async def sign_in(signin_request: SignInRequest, request: Request):
     """Authenticate user and return tokens"""
     result = cognito_auth.sign_in(
-        username=request.username,
-        password=request.password
+        username=signin_request.username,
+        password=signin_request.password
     )
     
     if not result["success"]:
@@ -82,9 +85,10 @@ async def sign_in(request: SignInRequest):
     return AuthResponse(**result)
 
 @router.post("/forgot-password", response_model=AuthResponse)
-async def forgot_password(request: ForgotPasswordRequest):
+@rate_limit_auth_endpoints()
+async def forgot_password(forgot_request: ForgotPasswordRequest, request: Request):
     """Initiate password reset"""
-    result = cognito_auth.forgot_password(username=request.username)
+    result = cognito_auth.forgot_password(username=forgot_request.username)
     
     if not result["success"]:
         raise HTTPException(
@@ -95,12 +99,12 @@ async def forgot_password(request: ForgotPasswordRequest):
     return AuthResponse(**result)
 
 @router.post("/reset-password", response_model=AuthResponse)
-async def reset_password(request: ResetPasswordRequest):
+async def reset_password(reset_request: ResetPasswordRequest):
     """Complete password reset"""
     result = cognito_auth.confirm_forgot_password(
-        username=request.username,
-        confirmation_code=request.confirmation_code,
-        new_password=request.new_password
+        username=reset_request.username,
+        confirmation_code=reset_request.confirmation_code,
+        new_password=reset_request.new_password
     )
     
     if not result["success"]:

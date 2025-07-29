@@ -6,6 +6,7 @@ from app.models import Document, Embedding
 from app.core.document_processor import process_document, validate_file_size, get_file_type_from_filename
 from app.core.embedding import chunk_text, embed_chunks_async
 from app.config import config
+# from app.cache import cached
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -31,6 +32,7 @@ class DocumentListResponse(BaseModel):
     total: int
 
 @router.get("/", response_model=DocumentListResponse)
+# @cached(key_prefix="documents_list", ttl=60)  # Cache for 1 minute
 async def list_documents(
     db: Session = Depends(get_db),
     tenant_id: str = Depends(get_current_tenant_id),
@@ -41,7 +43,7 @@ async def list_documents(
     try:
         query = db.query(Document).filter(Document.tenant_id == tenant_id)
         total = query.count()
-        documents = query.offset(skip).limit(limit).all()
+        documents = query.order_by(Document.created_at.desc()).offset(skip).limit(limit).all()
         
         document_responses = [
             DocumentResponse(
@@ -146,19 +148,29 @@ async def upload_document(
             # Generate embeddings
             embedding_data = await embed_chunks_async(chunks, tenant_id)
             
-            # Store embeddings
+            # Store embeddings in batches for better performance
             embeddings = []
-            for chunk_id, tenant, content, embedding in embedding_data:
-                emb = Embedding(
-                    id=uuid.uuid4(),
-                    tenant_id=tenant,
-                    content=content,
-                    embedding=embedding,
-                    metadata={"document_id": str(document.id)}
-                )
-                embeddings.append(emb)
+            batch_size = 100
             
+            for i in range(0, len(embedding_data), batch_size):
+                batch = embedding_data[i:i + batch_size]
+                batch_embeddings = []
+                
+                for chunk_id, tenant, content, embedding in batch:
+                    emb = Embedding(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant,
+                        content=content,
+                        embedding=embedding,
+                        metadata={"document_id": str(document.id)}
+                    )
+                    batch_embeddings.append(emb)
+                
+                embeddings.extend(batch_embeddings)
+            
+            # Add all embeddings at once
             db.add_all(embeddings)
+            db.flush()  # Ensure embeddings are written
             
             # Update document status
             document.status = "completed"

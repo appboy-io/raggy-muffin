@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
 import toast from 'react-hot-toast';
@@ -15,6 +16,7 @@ export default function Login() {
   
   const { login, signup, confirmSignup } = useAuth();
   const { config } = useConfig();
+  const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -24,6 +26,9 @@ export default function Login() {
       const result = await login(username, password);
       if (result.success) {
         toast.success('Login successful!');
+        if (result.redirect) {
+          navigate(result.redirect);
+        }
       } else {
         toast.error(result.message);
       }
@@ -230,7 +235,10 @@ export default function Login() {
             <div className="text-center">
               <button
                 type="button"
-                onClick={() => setShowSignup(true)}
+                onClick={() => {
+                  const widgetDomain = process.env.REACT_APP_WIDGET_DOMAIN || 'https://cleona.ragamuffin.app';
+                  window.location.href = widgetDomain;
+                }}
                 className="text-indigo-600 hover:text-indigo-500"
               >
                 Don't have an account? Sign up

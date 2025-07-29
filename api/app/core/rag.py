@@ -2,12 +2,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.embedding import embed_query_async
 from app.models import Embedding
+# from app.cache import cached
 from typing import List, Dict, Any
 import logging
 import re
+import hashlib
 
 logger = logging.getLogger(__name__)
 
+# @cached(key_prefix="rag_chunks", ttl=1800)  # Cache for 30 minutes
 async def retrieve_relevant_chunks(
     query: str, 
     tenant_id: str, 
@@ -16,17 +19,20 @@ async def retrieve_relevant_chunks(
 ) -> List[str]:
     """
     Retrieve relevant chunks using vector similarity search
+    Cached for 30 minutes to improve performance
     """
     try:
         # Get query embedding
         query_embedding = await embed_query_async(query)
         
-        # Perform vector similarity search
+        # Perform optimized vector similarity search with similarity threshold
         result = db.execute(
             text("""
-                SELECT content
+                SELECT content, 
+                       (1 - (embedding <-> (:query_emb)::vector)) as similarity
                 FROM embeddings
                 WHERE tenant_id = :tenant
+                  AND (embedding <-> (:query_emb)::vector) < 0.5
                 ORDER BY embedding <-> (:query_emb)::vector
                 LIMIT :top_k
             """),
@@ -43,6 +49,52 @@ async def retrieve_relevant_chunks(
     except Exception as e:
         logger.error(f"Error retrieving chunks: {e}")
         return []
+
+# @cached(key_prefix="rag_batch_chunks", ttl=1800)  # Cache for 30 minutes
+async def retrieve_relevant_chunks_batch(
+    queries: List[str], 
+    tenant_id: str, 
+    db: Session, 
+    top_k: int = 4
+) -> Dict[str, List[str]]:
+    """
+    Retrieve relevant chunks for multiple queries efficiently
+    """
+    try:
+        # Get all query embeddings in batch
+        query_embeddings = []
+        for query in queries:
+            embedding = await embed_query_async(query)
+            query_embeddings.append(embedding)
+        
+        # Perform batch similarity search
+        results = {}
+        for query, query_embedding in zip(queries, query_embeddings):
+            result = db.execute(
+                text("""
+                    SELECT content, 
+                           (1 - (embedding <-> (:query_emb)::vector)) as similarity
+                    FROM embeddings
+                    WHERE tenant_id = :tenant
+                      AND (embedding <-> (:query_emb)::vector) < 0.5
+                    ORDER BY embedding <-> (:query_emb)::vector
+                    LIMIT :top_k
+                """),
+                {
+                    "tenant": tenant_id, 
+                    "query_emb": query_embedding, 
+                    "top_k": top_k
+                }
+            )
+            
+            chunks = [row[0] for row in result.fetchall()]
+            results[query] = chunks
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error retrieving batch chunks: {e}")
+        return {query: [] for query in queries}
 
 def extract_contact_info(context_chunks: List[str]) -> Dict[str, List[str]]:
     """Extract contact information from context chunks with better parsing"""

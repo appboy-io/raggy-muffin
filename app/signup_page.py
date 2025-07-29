@@ -112,9 +112,22 @@ def signup_page():
     # Sign in link
     st.markdown("---")
     st.markdown("### Already have an account?")
-    if st.button("🔐 Sign In", use_container_width=True):
-        st.session_state.selected_page = "🔐 Sign In"
-        st.rerun()
+    st.markdown(f"""
+    <div style="text-align: center; margin: 1rem 0;">
+        <a href="{config.ADMIN_DOMAIN}" target="_blank" style="
+            display: inline-block;
+            padding: 0.5rem 2rem;
+            background-color: #2E8B57;
+            color: white;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        ">
+            🔐 Sign In
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Back to home
     if st.button("🏠 Back to Home", use_container_width=True):

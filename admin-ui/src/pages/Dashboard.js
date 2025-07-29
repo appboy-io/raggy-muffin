@@ -192,7 +192,7 @@ export default function Dashboard() {
             )}
             <div className="mt-4 pt-4 border-t border-gray-200">
               <a
-                href="/documents"
+                href="/admin/documents/"
                 className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
               >
                 View all documents →
@@ -235,7 +235,7 @@ export default function Dashboard() {
             )}
             <div className="mt-4 pt-4 border-t border-gray-200">
               <a
-                href="/chat"
+                href="/admin/chat"
                 className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
               >
                 View all sessions →
@@ -253,7 +253,7 @@ export default function Dashboard() {
         <div className="px-6 py-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <a
-              href="/documents"
+              href="/admin/documents/"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <DocumentIcon className="h-8 w-8 text-blue-500 mr-3" />
@@ -263,7 +263,7 @@ export default function Dashboard() {
               </div>
             </a>
             <a
-              href="/chat"
+              href="/admin/chat"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <ChatBubbleLeftRightIcon className="h-8 w-8 text-green-500 mr-3" />
@@ -273,7 +273,7 @@ export default function Dashboard() {
               </div>
             </a>
             <a
-              href="/widgets"
+              href="/admin/widgets/"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <PuzzlePieceIcon className="h-8 w-8 text-purple-500 mr-3" />

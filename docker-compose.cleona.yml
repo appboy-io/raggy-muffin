@@ -12,6 +12,32 @@ services:
     volumes:
       - cleona_pgdata:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  redis:
+    image: redis:7-alpine
+    container_name: cleona_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - cleona_redis_data:/data
+    command: redis-server --appendonly yes
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
 
   api:
     build: ./api
@@ -21,11 +47,23 @@ services:
       - "8004:8000"
     depends_on:
       - db
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
     env_file:
       - .env.cleona
     environment:
       # Database Configuration
       DATABASE_URL: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
+      
+      # Redis Configuration
+      REDIS_URL: redis://redis:6379
       
       # AWS Cognito loaded from .env.cleona
       
@@ -35,10 +73,13 @@ services:
       PRIMARY_COLOR: "#2E8B57"
       SECONDARY_COLOR: "#4682B4"
       
+      # API Configuration
+      API_BASE_URL: https://cleona.ragamuffin.app
+      
       # Domains
-      WIDGET_DOMAIN: http://localhost:3001
-      ADMIN_DOMAIN: http://localhost:3004
-      CORS_ORIGINS: http://localhost:3004,http://localhost:3001,http://localhost:8503
+      WIDGET_DOMAIN: https://cleona.ragamuffin.app
+      ADMIN_DOMAIN: https://cleona.ragamuffin.app/admin
+      CORS_ORIGINS: https://cleona.ragamuffin.app,http://localhost:3004,http://localhost:3001,http://localhost:8503
       
       # Feature Limits
       MAX_DOCUMENTS_PER_TENANT: 100
@@ -60,12 +101,50 @@ services:
       - "3004:3000"
     depends_on:
       - api
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
     environment:
       REACT_APP_API_URL: https://cleona.ragamuffin.app
+      REACT_APP_WIDGET_DOMAIN: https://cleona.ragamuffin.app
       REACT_APP_BRAND_NAME: Cleona
       REACT_APP_BRAND_LOGO: "🏥"
       REACT_APP_PRIMARY_COLOR: "#2E8B57"
       REACT_APP_SECONDARY_COLOR: "#4682B4"
+
+  frontend-ui:
+    build: 
+      context: ./frontend-ui
+      args:
+        REACT_APP_API_URL: https://cleona.ragamuffin.app
+        PUBLIC_URL: /frontend
+    container_name: cleona_frontend_ui
+    restart: always
+    ports:
+      - "3005:3000"
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    environment:
+      REACT_APP_API_URL: https://cleona.ragamuffin.app
+      REACT_APP_WIDGET_DOMAIN: https://cleona.ragamuffin.app
+      REACT_APP_BRAND_NAME: Cleona
+      REACT_APP_BRAND_LOGO: "🏥"
+      REACT_APP_PRIMARY_COLOR: "#2E8B57"
+      REACT_APP_SECONDARY_COLOR: "#4682B4"
+      PUBLIC_URL: /frontend
 
   app:
     build: .
@@ -75,6 +154,14 @@ services:
     depends_on:
       - db
       - api
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
     env_file:
       - .env.cleona
     environment:
@@ -105,6 +192,10 @@ services:
       WEBSITE_URL: https://cleona.ai
       
       # AWS Cognito loaded from .env.cleona
+      
+      # Domains
+      ADMIN_DOMAIN: https://cleona.ragamuffin.app/admin
+      WIDGET_DOMAIN: https://cleona.ragamuffin.app
       
       # Features
       FEATURE_1_TITLE: Medical Information Access
@@ -171,3 +262,4 @@ services:
 
 volumes:
   cleona_pgdata:
+  cleona_redis_data:

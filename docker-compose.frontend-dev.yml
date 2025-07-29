@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  db:
+    image: ankane/pgvector
+    container_name: cleona_pgvector_dev
+    restart: always
+    environment:
+      POSTGRES_USER: cleona_user
+      POSTGRES_PASSWORD: cleona_secure_pass_2024
+      POSTGRES_DB: cleona_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - cleona_pgdata_dev:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    container_name: cleona_redis_dev
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - cleona_redis_data_dev:/data
+    command: redis-server --appendonly yes
+
+  api:
+    build: ./api
+    container_name: cleona_api_dev
+    restart: always
+    ports:
+      - "8004:8000"
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env.cleona
+    environment:
+      DATABASE_URL: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
+      REDIS_URL: redis://redis:6379
+      BRAND_NAME: Cleona
+      BRAND_LOGO: 🏥
+      PRIMARY_COLOR: "#2E8B57"
+      SECONDARY_COLOR: "#4682B4"
+      API_BASE_URL: http://localhost:8004
+      WIDGET_DOMAIN: http://localhost:3005
+      ADMIN_DOMAIN: http://localhost:3004
+      CORS_ORIGINS: http://localhost:3005,http://localhost:3004,http://localhost:3000,http://localhost:8503
+      SECRET_KEY: cleona-secret-key-change-this-in-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+    volumes:
+      - ./api:/app
+      - /app/venv
+
+  frontend-ui:
+    build:
+      context: ./frontend-ui
+      dockerfile: Dockerfile.dev
+    container_name: cleona_frontend_ui_dev
+    restart: always
+    ports:
+      - "3005:3000"
+    depends_on:
+      - api
+    environment:
+      REACT_APP_API_URL: http://localhost:8004
+      REACT_APP_WIDGET_DOMAIN: http://localhost:3005
+      REACT_APP_BRAND_NAME: Cleona
+      REACT_APP_BRAND_LOGO: "🏥"
+      REACT_APP_PRIMARY_COLOR: "#2E8B57"
+      REACT_APP_SECONDARY_COLOR: "#4682B4"
+      CHOKIDAR_USEPOLLING: true
+    volumes:
+      - ./frontend-ui:/app
+      - /app/node_modules
+
+  # Keep Streamlit available for development
+  streamlit:
+    build: .
+    container_name: cleona_streamlit_dev
+    ports:
+      - "8503:8501"
+    depends_on:
+      - db
+      - api
+    env_file:
+      - .env.cleona
+    environment:
+      DB_CONN: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
+      DATABASE_URL: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
+      APP_NAME: Cleona
+      APP_ICON: 🏥
+      PRIMARY_COLOR: "#2E8B57"
+      SECONDARY_COLOR: "#4682B4"
+      ADMIN_DOMAIN: http://localhost:3004
+      WIDGET_DOMAIN: http://localhost:3005
+    volumes:
+      - ./app:/app
+
+volumes:
+  cleona_pgdata_dev:
+  cleona_redis_data_dev:

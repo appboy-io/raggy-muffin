@@ -1,9 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import config
 from app.database import init_db
 from app.auth.routes import router as auth_router
+# from app.cache import cached
+from app.utils.rate_limit import limiter, custom_rate_limit_exceeded_handler, rate_limit_general_endpoints
+from slowapi.errors import RateLimitExceeded
 
 # Create FastAPI app
 app = FastAPI(
@@ -11,6 +14,10 @@ app = FastAPI(
     description=f"Backend API for {config.BRAND_NAME} RAG platform",
     version="1.0.0"
 )
+
+# Add rate limiter to the app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, custom_rate_limit_exceeded_handler)
 
 # CORS middleware
 app.add_middleware(
@@ -41,7 +48,8 @@ async def startup_event():
     init_db()
 
 @app.get("/")
-async def root():
+@rate_limit_general_endpoints()
+async def root(request: Request):
     """Root endpoint with client branding"""
     return {
         "message": f"Welcome to {config.BRAND_NAME} API",
@@ -51,12 +59,15 @@ async def root():
     }
 
 @app.get("/api/v1/config")
-async def get_config():
+@rate_limit_general_endpoints()
+# @cached(key_prefix="config", ttl=3600)  # Cache for 1 hour
+async def get_config(request: Request):
     """Get client configuration for frontend"""
     return config.to_dict()
 
 @app.get("/health")
-async def health_check():
+@rate_limit_general_endpoints()
+async def health_check(request: Request):
     """Health check endpoint"""
     return {"status": "healthy", "brand": config.BRAND_NAME}
 

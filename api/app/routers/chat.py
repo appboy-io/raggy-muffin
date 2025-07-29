@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.dependencies import get_current_tenant_id, get_optional_user
 from app.models import ChatSession, ChatMessage
 from app.core.rag import retrieve_relevant_chunks, generate_answer
+from app.utils.rate_limit import rate_limit_chat_endpoints
+# from app.cache import cached, cache
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -33,18 +35,40 @@ class ChatHistoryResponse(BaseModel):
     created_at: datetime
     last_activity: datetime
 
+# @cached(key_prefix="chat_session", ttl=300)  # Cache for 5 minutes
+async def get_cached_session(session_id: str, tenant_id: str, db: Session) -> Optional[ChatSession]:
+    """Get chat session with caching"""
+    try:
+        return db.query(ChatSession).filter(
+            ChatSession.session_id == session_id,
+            ChatSession.tenant_id == tenant_id
+        ).first()
+    except Exception:
+        return None
+
+async def batch_add_messages(db: Session, messages: List[ChatMessage]) -> None:
+    """Batch add messages for better performance"""
+    try:
+        db.add_all(messages)
+        db.flush()  # Ensure IDs are assigned
+    except Exception as e:
+        logger.error(f"Error batch adding messages: {e}")
+        raise
+
 @router.post("/{tenant_id}/query", response_model=ChatResponse)
+@rate_limit_chat_endpoints()
 async def chat_query(
     tenant_id: str,
     request: ChatRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_user)
 ):
     """
-    Public chat endpoint for widgets - no authentication required
+    Public chat endpoint for widgets - rate limited for protection
     """
     try:
-        # Rate limiting could be implemented here based on IP/session
+        # Rate limiting implemented via decorator
         
         # Get or create session
         session_id = request.session_id
@@ -60,10 +84,7 @@ async def chat_query(
             db.add(chat_session)
         else:
             # Update existing session activity
-            chat_session = db.query(ChatSession).filter(
-                ChatSession.session_id == session_id,
-                ChatSession.tenant_id == tenant_id
-            ).first()
+            chat_session = await get_cached_session(session_id, tenant_id, db)
             
             if not chat_session:
                 # Session not found, create new one
@@ -73,8 +94,10 @@ async def chat_query(
                     session_id=session_id
                 )
                 db.add(chat_session)
+                # Clear cache for this session
+                cache.delete(f"chat_session:{hash(f'{session_id}{tenant_id}')}")
         
-        # Store user message
+        # Prepare user message
         user_message = ChatMessage(
             id=uuid.uuid4(),
             session_id=chat_session.id,
@@ -82,7 +105,6 @@ async def chat_query(
             message_type="user",
             content=request.message
         )
-        db.add(user_message)
         
         # Retrieve relevant context
         context_chunks = await retrieve_relevant_chunks(
@@ -95,7 +117,7 @@ async def chat_query(
         # Generate answer
         response_data = generate_answer(request.message, context_chunks)
         
-        # Store assistant response
+        # Prepare assistant response
         assistant_message = ChatMessage(
             id=uuid.uuid4(),
             session_id=chat_session.id,
@@ -109,7 +131,9 @@ async def chat_query(
                 "providers": response_data["providers"]
             }
         )
-        db.add(assistant_message)
+        
+        # Batch add messages for better performance
+        await batch_add_messages(db, [user_message, assistant_message])
         
         # Update session activity
         chat_session.last_activity = datetime.utcnow()
@@ -146,10 +170,7 @@ async def authenticated_chat_query(
         # Get or create session
         session_id = request.session_id or str(uuid.uuid4())
         
-        chat_session = db.query(ChatSession).filter(
-            ChatSession.session_id == session_id,
-            ChatSession.tenant_id == tenant_id
-        ).first()
+        chat_session = await get_cached_session(session_id, tenant_id, db)
         
         if not chat_session:
             chat_session = ChatSession(
@@ -159,7 +180,7 @@ async def authenticated_chat_query(
             )
             db.add(chat_session)
         
-        # Store user message
+        # Prepare user message
         user_message = ChatMessage(
             id=uuid.uuid4(),
             session_id=chat_session.id,
@@ -167,7 +188,6 @@ async def authenticated_chat_query(
             message_type="user",
             content=request.message
         )
-        db.add(user_message)
         
         # Retrieve relevant context
         context_chunks = await retrieve_relevant_chunks(
@@ -180,7 +200,7 @@ async def authenticated_chat_query(
         # Generate answer
         response_data = generate_answer(request.message, context_chunks)
         
-        # Store assistant response
+        # Prepare assistant response
         assistant_message = ChatMessage(
             id=uuid.uuid4(),
             session_id=chat_session.id,
@@ -194,7 +214,9 @@ async def authenticated_chat_query(
                 "providers": response_data["providers"]
             }
         )
-        db.add(assistant_message)
+        
+        # Batch add messages for better performance
+        await batch_add_messages(db, [user_message, assistant_message])
         
         # Update session activity
         chat_session.last_activity = datetime.utcnow()

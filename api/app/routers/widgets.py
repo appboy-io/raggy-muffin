@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.dependencies import get_current_tenant_id
 from app.models import WidgetConfig
 from app.config import config
+from app.utils.rate_limit import rate_limit_widget_endpoints
 from pydantic import BaseModel
 from typing import Optional
 import uuid
@@ -137,7 +138,9 @@ async def update_widget_config(
         )
 
 @router.get("/{tenant_id}/config", response_model=WidgetConfigResponse)
+@rate_limit_widget_endpoints()
 async def get_public_widget_config(
+    request: Request,
     tenant_id: str,
     db: Session = Depends(get_db)
 ):
@@ -178,7 +181,9 @@ async def get_public_widget_config(
         )
 
 @router.get("/{tenant_id}/embed.js", response_class=PlainTextResponse)
+@rate_limit_widget_endpoints()
 async def get_widget_embed_script(
+    request: Request,
     tenant_id: str,
     db: Session = Depends(get_db)
 ):
@@ -269,7 +274,9 @@ async def get_widget_embed_script(
         return "// Error loading widget"
 
 @router.get("/{tenant_id}/preview", response_class=HTMLResponse)
+@rate_limit_widget_endpoints()
 async def get_widget_preview(
+    request: Request,
     tenant_id: str,
     db: Session = Depends(get_db)
 ):

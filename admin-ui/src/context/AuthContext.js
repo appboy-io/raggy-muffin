@@ -44,14 +44,20 @@ export function AuthProvider({ children }) {
         if (data.success) {
           setUser(data.data);
         } else {
+          console.error('Token verification failed:', data.message);
           logout();
         }
       } else {
-        logout();
+        console.error('Token verification HTTP error:', response.status, response.statusText);
+        // Only logout for 401/403, not for network errors
+        if (response.status === 401 || response.status === 403) {
+          logout();
+        }
       }
     } catch (error) {
-      console.error('Token verification failed:', error);
-      logout();
+      console.error('Token verification network error:', error);
+      // Don't logout on network errors, just log the error
+      // This prevents being kicked out due to temporary network issues
     } finally {
       setLoading(false);
     }
@@ -85,8 +91,9 @@ export function AuthProvider({ children }) {
       if (response.success && response.data) {
         const { access_token, user_id, tenant_id, username: user } = response.data;
         
-        setToken(access_token);
+        // Set token first and update localStorage
         localStorage.setItem('token', access_token);
+        setToken(access_token);
         
         const userData = {
           userId: user_id,
@@ -96,7 +103,8 @@ export function AuthProvider({ children }) {
         };
         
         setUser(userData);
-        return { success: true };
+        
+        return { success: true, redirect: '/admin/' };
       } else {
         return { success: false, message: response.message || 'Login failed' };
       }

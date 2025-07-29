@@ -1,5 +1,78 @@
 import os
 from typing import Dict, Any
+import streamlit as st
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def load_environment_config():
+    """Load configuration from environment variables (cached)"""
+    config_data = {}
+    
+    # App Branding
+    config_data['APP_NAME'] = os.getenv('APP_NAME', 'Raggy Muffin')
+    config_data['APP_ICON'] = os.getenv('APP_ICON', '🧠')
+    config_data['APP_TAGLINE'] = os.getenv('APP_TAGLINE', 'Turn Your Documents Into Intelligent Conversations')
+    config_data['APP_DESCRIPTION'] = os.getenv('APP_DESCRIPTION', 'Built by researchers, for researchers. Upload your documents, ask questions in natural language, and get instant, accurate answers with source citations.')
+    
+    # Pricing
+    config_data['STARTER_PLAN_PRICE'] = os.getenv('STARTER_PLAN_PRICE', '$19')
+    config_data['STARTER_PLAN_PERIOD'] = os.getenv('STARTER_PLAN_PERIOD', 'month')
+    config_data['FREE_TRIAL_DAYS'] = os.getenv('FREE_TRIAL_DAYS', '14')
+    config_data['STARTER_PLAN_PAGES'] = os.getenv('STARTER_PLAN_PAGES', '1,000')
+    
+    # Load all other config values
+    config_data['ADMIN_DOMAIN'] = os.getenv('ADMIN_DOMAIN', 'http://localhost:3000')
+    config_data['API_BASE_URL'] = os.getenv('API_BASE_URL', 'http://localhost:8000')
+    config_data['WEBSITE_DOMAIN'] = os.getenv('WEBSITE_DOMAIN', 'http://localhost:3002')
+    config_data['CTA_PRIMARY_TEXT'] = os.getenv('CTA_PRIMARY_TEXT', 'GET STARTED FREE')
+    config_data['CTA_SECONDARY_TEXT'] = os.getenv('CTA_SECONDARY_TEXT', 'START FREE TRIAL')
+    config_data['CTA_TRIAL_TEXT'] = os.getenv('CTA_TRIAL_TEXT', 'Start your free trial')
+    config_data['PRIMARY_COLOR'] = os.getenv('PRIMARY_COLOR', '#0066cc')
+    config_data['SECONDARY_COLOR'] = os.getenv('SECONDARY_COLOR', '#666666')
+    config_data['ACCENT_COLOR'] = os.getenv('ACCENT_COLOR', '#f0f8ff')
+    
+    # Features
+    config_data['FEATURE_1_TITLE'] = os.getenv('FEATURE_1_TITLE', 'Instant Insights')
+    config_data['FEATURE_1_ICON'] = os.getenv('FEATURE_1_ICON', '🎯')
+    config_data['FEATURE_1_DESC'] = os.getenv('FEATURE_1_DESC', 'Upload documents and start asking questions immediately. No complex setup or training required.')
+    config_data['FEATURE_1_QUOTE'] = os.getenv('FEATURE_1_QUOTE', 'I can now analyze 100+ research papers in minutes instead of days')
+    
+    config_data['FEATURE_2_TITLE'] = os.getenv('FEATURE_2_TITLE', 'Smart Citations')
+    config_data['FEATURE_2_ICON'] = os.getenv('FEATURE_2_ICON', '📚')
+    config_data['FEATURE_2_DESC'] = os.getenv('FEATURE_2_DESC', 'Every answer includes precise citations so you can verify sources and dive deeper into the research.')
+    config_data['FEATURE_2_QUOTE'] = os.getenv('FEATURE_2_QUOTE', 'Perfect for academic research - I always know exactly where information comes from')
+    
+    config_data['FEATURE_3_TITLE'] = os.getenv('FEATURE_3_TITLE', 'Privacy First')
+    config_data['FEATURE_3_ICON'] = os.getenv('FEATURE_3_ICON', '🔒')
+    config_data['FEATURE_3_DESC'] = os.getenv('FEATURE_3_DESC', 'Your documents stay secure and private. We never use your content to train AI models.')
+    config_data['FEATURE_3_QUOTE'] = os.getenv('FEATURE_3_QUOTE', 'Finally, a tool I can trust with confidential research data')
+    
+    # Additional configuration
+    config_data['SOCIAL_PROOF_TEXT'] = os.getenv('SOCIAL_PROOF_TEXT', 'Trusted by thousands of researchers, analysts, and knowledge workers worldwide')
+    
+    # Testimonials
+    config_data['TESTIMONIAL_1_TEXT'] = os.getenv('TESTIMONIAL_1_TEXT', 'Raggy Muffin transformed how I conduct literature reviews. What used to take weeks now takes hours.')
+    config_data['TESTIMONIAL_1_AUTHOR'] = os.getenv('TESTIMONIAL_1_AUTHOR', 'Dr. Sarah Chen')
+    config_data['TESTIMONIAL_1_TITLE'] = os.getenv('TESTIMONIAL_1_TITLE', 'Research Scientist, MIT')
+    
+    config_data['TESTIMONIAL_2_TEXT'] = os.getenv('TESTIMONIAL_2_TEXT', 'As a legal researcher, I need precise information fast. Raggy Muffin helps me find relevant precedents.')
+    config_data['TESTIMONIAL_2_AUTHOR'] = os.getenv('TESTIMONIAL_2_AUTHOR', 'Marcus Rodriguez')
+    config_data['TESTIMONIAL_2_TITLE'] = os.getenv('TESTIMONIAL_2_TITLE', 'Senior Legal Analyst')
+    
+    # Document Types and Use Cases
+    config_data['SUPPORTED_FORMATS'] = os.getenv('SUPPORTED_FORMATS', 'PDFs, Word docs, text files, Research papers & reports, Legal documents & contracts')
+    config_data['USE_CASES'] = os.getenv('USE_CASES', 'Research analysis, Document review, Knowledge extraction, Content summarization, Q&A automation')
+    
+    # Company Info
+    config_data['COMPANY_NAME'] = os.getenv('COMPANY_NAME', 'Raggy Muffin Inc.')
+    config_data['SUPPORT_EMAIL'] = os.getenv('SUPPORT_EMAIL', 'support@raggymuffin.com')
+    config_data['WEBSITE_URL'] = os.getenv('WEBSITE_URL', 'https://raggymuffin.com')
+    
+    # Streamlit Config
+    config_data['STREAMLIT_PAGE_TITLE'] = os.getenv('STREAMLIT_PAGE_TITLE', f"{config_data['APP_NAME']} - RAG Q&A Platform")
+    config_data['STREAMLIT_PAGE_ICON'] = os.getenv('STREAMLIT_PAGE_ICON', config_data['APP_ICON'])
+    config_data['STREAMLIT_LAYOUT'] = os.getenv('STREAMLIT_LAYOUT', 'wide')
+    
+    return config_data
 
 class AppConfig:
     """Configuration class for white-label application settings"""
@@ -11,58 +84,14 @@ class AppConfig:
     def load_config(self):
         """Load configuration from environment variables"""
         
-        # App Branding
-        self.APP_NAME = os.getenv('APP_NAME', 'Raggy Muffin')
-        self.APP_ICON = os.getenv('APP_ICON', '🧠')
-        self.APP_TAGLINE = os.getenv('APP_TAGLINE', 'Turn Your Documents Into Intelligent Conversations')
-        self.APP_DESCRIPTION = os.getenv('APP_DESCRIPTION', 'Built by researchers, for researchers. Upload your documents, ask questions in natural language, and get instant, accurate answers with source citations.')
+        # Load cached config data
+        config_data = load_environment_config()
         
-        # Pricing
-        self.STARTER_PLAN_PRICE = os.getenv('STARTER_PLAN_PRICE', '$19')
-        self.STARTER_PLAN_PERIOD = os.getenv('STARTER_PLAN_PERIOD', 'month')
-        self.FREE_TRIAL_DAYS = os.getenv('FREE_TRIAL_DAYS', '14')
-        self.STARTER_PLAN_PAGES = os.getenv('STARTER_PLAN_PAGES', '1,000')
+        # Set all attributes from cached data
+        for key, value in config_data.items():
+            setattr(self, key, value)
         
-        # Features
-        self.FEATURE_1_TITLE = os.getenv('FEATURE_1_TITLE', 'Instant Insights')
-        self.FEATURE_1_ICON = os.getenv('FEATURE_1_ICON', '🎯')
-        self.FEATURE_1_DESC = os.getenv('FEATURE_1_DESC', 'Upload documents and start asking questions immediately. No complex setup or training required.')
-        self.FEATURE_1_QUOTE = os.getenv('FEATURE_1_QUOTE', 'I can now analyze 100+ research papers in minutes instead of days')
-        
-        self.FEATURE_2_TITLE = os.getenv('FEATURE_2_TITLE', 'Your Data, Your Control')
-        self.FEATURE_2_ICON = os.getenv('FEATURE_2_ICON', '🔒')
-        self.FEATURE_2_DESC = os.getenv('FEATURE_2_DESC', 'Enterprise-grade security with complete data privacy. Your documents never leave your secure workspace.')
-        self.FEATURE_2_QUOTE = os.getenv('FEATURE_2_QUOTE', 'Finally, a solution that respects our confidential research data')
-        
-        self.FEATURE_3_TITLE = os.getenv('FEATURE_3_TITLE', 'Pay Only For What You Use')
-        self.FEATURE_3_ICON = os.getenv('FEATURE_3_ICON', '💰')
-        self.FEATURE_3_DESC = os.getenv('FEATURE_3_DESC', 'Transparent pricing based on document processing. No hidden fees, no surprises.')
-        self.FEATURE_3_QUOTE = os.getenv('FEATURE_3_QUOTE', 'More cost-effective than hiring a research assistant')
-        
-        # Social Proof
-        self.SOCIAL_PROOF_TEXT = os.getenv('SOCIAL_PROOF_TEXT', 'Trusted by thousands of researchers, analysts, and knowledge workers worldwide')
-        
-        # Testimonials
-        self.TESTIMONIAL_1_TEXT = os.getenv('TESTIMONIAL_1_TEXT', 'Raggy Muffin transformed how I conduct literature reviews. What used to take weeks now takes hours. The accuracy of answers and proper citations save me countless hours of verification.')
-        self.TESTIMONIAL_1_AUTHOR = os.getenv('TESTIMONIAL_1_AUTHOR', 'Dr. Sarah Chen')
-        self.TESTIMONIAL_1_TITLE = os.getenv('TESTIMONIAL_1_TITLE', 'Research Scientist, MIT')
-        
-        self.TESTIMONIAL_2_TEXT = os.getenv('TESTIMONIAL_2_TEXT', 'As a legal researcher, I need precise information fast. Raggy Muffin helps me find relevant precedents and extract key arguments from hundreds of case documents effortlessly.')
-        self.TESTIMONIAL_2_AUTHOR = os.getenv('TESTIMONIAL_2_AUTHOR', 'Marcus Rodriguez')
-        self.TESTIMONIAL_2_TITLE = os.getenv('TESTIMONIAL_2_TITLE', 'Senior Legal Analyst')
-        
-        # Document Types
-        self.SUPPORTED_FORMATS = os.getenv('SUPPORTED_FORMATS', 'PDFs, Word docs, text files, Research papers & reports, Legal documents & contracts').split(', ')
-        
-        # Use Cases
-        self.USE_CASES = os.getenv('USE_CASES', 'Research analysis, Document review, Knowledge extraction, Content summarization, Q&A automation').split(', ')
-        
-        # Company Info
-        self.COMPANY_NAME = os.getenv('COMPANY_NAME', 'Raggy Muffin Inc.')
-        self.SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'support@raggymuffin.com')
-        self.WEBSITE_URL = os.getenv('WEBSITE_URL', 'https://raggymuffin.com')
-        
-        # AWS Cognito (keep existing)
+        # AWS Cognito (keep existing - these are sensitive and shouldn't be cached)
         self.AWS_COGNITO_USER_POOL_ID = os.getenv('AWS_COGNITO_USER_POOL_ID')
         self.AWS_COGNITO_CLIENT_ID = os.getenv('AWS_COGNITO_CLIENT_ID')
         self.AWS_COGNITO_CLIENT_SECRET = os.getenv('AWS_COGNITO_CLIENT_SECRET')
