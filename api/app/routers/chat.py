@@ -107,12 +107,14 @@ async def chat_query(
         )
         
         # Retrieve relevant context
+        logger.error(f"Chat query: '{request.message}' for tenant: {tenant_id}")
         context_chunks = await retrieve_relevant_chunks(
             query=request.message,
             tenant_id=tenant_id,
             db=db,
             top_k=4
         )
+        logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
         response_data = generate_answer(request.message, context_chunks)
@@ -190,12 +192,14 @@ async def authenticated_chat_query(
         )
         
         # Retrieve relevant context
+        logger.error(f"Chat query: '{request.message}' for tenant: {tenant_id}")
         context_chunks = await retrieve_relevant_chunks(
             query=request.message,
             tenant_id=tenant_id,
             db=db,
             top_k=4
         )
+        logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
         response_data = generate_answer(request.message, context_chunks)
