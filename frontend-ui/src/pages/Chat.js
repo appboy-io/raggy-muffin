@@ -21,7 +21,9 @@ const Chat = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [streamingMessageId, setStreamingMessageId] = useState(null);
   const messagesEndRef = useRef(null);
+  const eventSourceRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -30,6 +32,15 @@ const Chat = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    // Cleanup EventSource on component unmount
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -47,39 +58,115 @@ const Chat = () => {
       timestamp: new Date(),
     };
 
+    const currentMessage = inputMessage;
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
 
-    try {
-      const response = await chatAPI.sendMessage(
-        user.tenant_id,
-        inputMessage,
-        sessionId
-      );
+    // Close any existing EventSource
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
 
+    try {
+      // Create streaming assistant message
+      const assistantMessageId = Date.now() + 1;
       const assistantMessage = {
-        id: Date.now() + 1,
+        id: assistantMessageId,
         type: 'assistant',
-        content: response.data.answer,
-        sources: response.data.sources || [],
-        contact_info: response.data.contact_info || {},
-        categories: response.data.categories || [],
-        providers: response.data.providers || [],
+        content: '',
+        isStreaming: true,
+        sources: [],
+        contact_info: {},
+        categories: [],
+        providers: [],
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      setStreamingMessageId(assistantMessageId);
+
+      // Set up streaming
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const streamUrl = `${apiUrl}/api/v1/chat/${user.tenant_id}/stream`;
       
-      // Set session ID for future messages
-      if (response.data.session_id && !sessionId) {
-        setSessionId(response.data.session_id);
+      // Use fetch with streaming instead of EventSource for better error handling
+      const response = await fetch(streamUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user.access_token && { 'Authorization': `Bearer ${user.access_token}` })
+        },
+        body: JSON.stringify({
+          message: currentMessage,
+          session_id: sessionId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start streaming');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              
+              if (data.type === 'chunk') {
+                // Update streaming message content
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMessageId 
+                    ? { ...msg, content: msg.content + data.content }
+                    : msg
+                ));
+              } else if (data.type === 'complete') {
+                // Update message with final metadata
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMessageId 
+                    ? { 
+                        ...msg, 
+                        isStreaming: false,
+                        sources: data.sources || [],
+                        contact_info: data.contact_info || {},
+                        categories: data.categories || [],
+                        providers: data.providers || []
+                      }
+                    : msg
+                ));
+                
+                // Set session ID for future messages
+                if (data.session_id && !sessionId) {
+                  setSessionId(data.session_id);
+                }
+              } else if (data.type === 'error') {
+                throw new Error(data.message);
+              }
+            } catch (parseError) {
+              console.warn('Failed to parse SSE data:', parseError);
+            }
+          }
+        }
       }
 
     } catch (error) {
-      console.error('Chat error:', error);
+      console.error('Streaming chat error:', error);
+      
+      // Remove the streaming message and add error message
+      setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
+      
       const errorMessage = {
-        id: Date.now() + 1,
+        id: Date.now() + 2,
         type: 'error',
         content: 'Sorry, I encountered an error while processing your message. Please try again.',
         timestamp: new Date(),
@@ -88,6 +175,7 @@ const Chat = () => {
       toast.error('Failed to send message');
     } finally {
       setIsLoading(false);
+      setStreamingMessageId(null);
     }
   };
 
@@ -161,6 +249,10 @@ const Chat = () => {
                   {line}
                 </p>
               ))}
+              {/* Streaming cursor */}
+              {message.isStreaming && (
+                <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1"></span>
+              )}
             </div>
             
             {/* Additional info for assistant messages */}

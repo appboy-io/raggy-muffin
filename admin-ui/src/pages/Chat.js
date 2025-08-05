@@ -14,7 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 // Component to format assistant messages with proper styling
-function FormattedAssistantMessage({ content }) {
+function FormattedAssistantMessage({ content, isStreaming = false }) {
   const formatContent = (text) => {
     const lines = text.split('\n');
     const formatted = [];
@@ -106,6 +106,10 @@ function FormattedAssistantMessage({ content }) {
   return (
     <div className="space-y-1">
       {formatContent(content)}
+      {/* Streaming cursor */}
+      {isStreaming && (
+        <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1"></span>
+      )}
     </div>
   );
 }
@@ -114,6 +118,8 @@ export default function Chat() {
   const [message, setMessage] = useState('');
   const [currentSession, setCurrentSession] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const { config } = useConfig();
 
@@ -167,14 +173,134 @@ export default function Chat() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!message.trim()) return;
+    if (!message.trim() || isStreaming) return;
 
-    sendMessageMutation.mutate({
-      message: message.trim(),
-      sessionId: currentSession,
-    });
+    const userMessage = {
+      id: Date.now() + '-user',
+      type: 'user',
+      content: message.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    const currentMessage = message.trim();
+    setMessages(prev => [...prev, userMessage]);
+    setMessage('');
+    setIsStreaming(true);
+
+    try {
+      // Create streaming assistant message
+      const assistantMessageId = Date.now() + '-assistant';
+      const assistantMessage = {
+        id: assistantMessageId,
+        type: 'assistant',
+        content: '',
+        isStreaming: true,
+        created_at: new Date().toISOString(),
+        metadata: {
+          sources: [],
+          contact_info: {},
+          categories: [],
+          providers: []
+        }
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+      setStreamingMessageId(assistantMessageId);
+
+      // Set up streaming
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const streamUrl = `${apiUrl}/api/v1/chat/stream`;
+      
+      const response = await fetch(streamUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          message: currentMessage,
+          session_id: currentSession
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start streaming');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              
+              if (data.type === 'chunk') {
+                // Update streaming message content
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMessageId 
+                    ? { ...msg, content: msg.content + data.content }
+                    : msg
+                ));
+              } else if (data.type === 'complete') {
+                // Update message with final metadata
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMessageId 
+                    ? { 
+                        ...msg, 
+                        isStreaming: false,
+                        metadata: {
+                          sources: data.sources || [],
+                          contact_info: data.contact_info || {},
+                          categories: data.categories || [],
+                          providers: data.providers || []
+                        }
+                      }
+                    : msg
+                ));
+                
+                // Set session ID for future messages
+                if (data.session_id && !currentSession) {
+                  setCurrentSession(data.session_id);
+                }
+              } else if (data.type === 'error') {
+                throw new Error(data.message);
+              }
+            } catch (parseError) {
+              console.warn('Failed to parse SSE data:', parseError);
+            }
+          }
+        }
+      }
+
+    } catch (error) {
+      console.error('Streaming chat error:', error);
+      
+      // Remove the streaming message and add error message
+      setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
+      
+      const errorMessage = {
+        id: Date.now() + '-error',
+        type: 'assistant',
+        content: 'Sorry, I encountered an error while processing your message. Please try again.',
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      toast.error('Failed to send message');
+    } finally {
+      setIsStreaming(false);
+      setStreamingMessageId(null);
+    }
   };
 
   const startNewSession = () => {
@@ -298,7 +424,7 @@ export default function Chat() {
                     }`}>
                       <div className="text-sm">
                         {msg.type === 'assistant' ? (
-                          <FormattedAssistantMessage content={msg.content} />
+                          <FormattedAssistantMessage content={msg.content} isStreaming={msg.isStreaming} />
                         ) : (
                           <div className="whitespace-pre-wrap">{msg.content}</div>
                         )}
@@ -344,15 +470,15 @@ export default function Chat() {
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Type your message..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  disabled={sendMessageMutation.isLoading}
+                  disabled={isStreaming}
                 />
               </div>
               <button
                 type="submit"
-                disabled={!message.trim() || sendMessageMutation.isLoading}
+                disabled={!message.trim() || isStreaming}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {sendMessageMutation.isLoading ? (
+                {isStreaming ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <PaperAirplaneIcon className="w-5 h-5" />

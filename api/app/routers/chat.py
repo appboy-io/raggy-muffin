@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.dependencies import get_current_tenant_id, get_optional_user
@@ -7,10 +8,12 @@ from app.core.rag import retrieve_relevant_chunks, generate_answer
 from app.utils.rate_limit import rate_limit_chat_endpoints
 # from app.cache import cached, cache
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, AsyncGenerator
 from datetime import datetime
 import uuid
 import logging
+import json
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +120,7 @@ async def chat_query(
         logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
-        response_data = generate_answer(request.message, context_chunks)
+        response_data = await generate_answer(request.message, context_chunks)
         
         # Prepare assistant response
         assistant_message = ChatMessage(
@@ -202,7 +205,7 @@ async def authenticated_chat_query(
         logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
-        response_data = generate_answer(request.message, context_chunks)
+        response_data = await generate_answer(request.message, context_chunks)
         
         # Prepare assistant response
         assistant_message = ChatMessage(
@@ -339,4 +342,217 @@ async def get_chat_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve chat session"
+        )
+
+async def stream_chat_response(
+    message: str,
+    tenant_id: str,
+    session_id: str,
+    db: Session
+) -> AsyncGenerator[str, None]:
+    """Stream chat response using Server-Sent Events"""
+    try:
+        # Retrieve relevant context
+        context_chunks = await retrieve_relevant_chunks(
+            query=message,
+            tenant_id=tenant_id,
+            db=db,
+            top_k=4
+        )
+        
+        # Import here to avoid circular imports
+        from app.core.rag import generate_single_prompt_response
+        
+        # Stream the response
+        full_response = ""
+        async for chunk in generate_streaming_response(message, context_chunks):
+            full_response += chunk
+            # Send chunk as SSE
+            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+        
+        # Send completion event with metadata
+        response_data = await generate_answer(message, context_chunks)
+        completion_data = {
+            'type': 'complete',
+            'session_id': session_id,
+            'sources': response_data['sources'],
+            'contact_info': response_data['contact_info'],
+            'categories': response_data['categories'],
+            'providers': response_data['providers']
+        }
+        yield f"data: {json.dumps(completion_data)}\n\n"
+        
+    except Exception as e:
+        logger.error(f"Error in streaming chat: {e}")
+        error_data = {
+            'type': 'error',
+            'message': 'Failed to process chat query'
+        }
+        yield f"data: {json.dumps(error_data)}\n\n"
+
+async def generate_streaming_response(message: str, context_chunks: List[str]) -> AsyncGenerator[str, None]:
+    """Generate streaming response using Ollama"""
+    try:
+        # Import here to avoid circular imports
+        import ollama
+        import os
+        
+        # Prepare context
+        context = "\n---\n".join(context_chunks) if context_chunks else ""
+        
+        # Create prompt
+        system_prompt = """You are Clara, a helpful and empathetic assistant that connects people with local aid services and resources."""
+        
+        user_prompt = f"""User Question: {message}
+
+Available Information: {context}
+
+Please provide a helpful response based on this information."""
+        
+        # Stream from Ollama
+        host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+        model = os.getenv('OLLAMA_CHAT_MODEL', 'llama3.2:3b-instruct-q4_0')
+        
+        def ollama_stream():
+            return ollama.chat(
+                model=model,
+                messages=[
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': user_prompt}
+                ],
+                stream=True,
+                options={'host': host}
+            )
+        
+        # Run Ollama stream in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        stream_generator = await loop.run_in_executor(None, ollama_stream)
+        
+        for chunk in stream_generator:
+            if 'message' in chunk and 'content' in chunk['message']:
+                content = chunk['message']['content']
+                if content:
+                    yield content
+                    # Small delay to prevent overwhelming the client
+                    await asyncio.sleep(0.01)
+                    
+    except Exception as e:
+        logger.error(f"Error in Ollama streaming: {e}")
+        # Fallback to non-streaming
+        from app.core.rag import generate_single_prompt_response
+        response = await generate_single_prompt_response(message, context_chunks)
+        # Simulate streaming by sending chunks
+        words = response.split()
+        for i in range(0, len(words), 3):  # Send 3 words at a time
+            chunk = " ".join(words[i:i+3]) + " "
+            yield chunk
+            await asyncio.sleep(0.05)
+
+@router.post("/{tenant_id}/stream")
+@rate_limit_chat_endpoints()
+async def stream_chat_query(
+    tenant_id: str,
+    request: ChatRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user)
+):
+    """
+    Streaming chat endpoint for widgets - rate limited for protection
+    """
+    try:
+        # Get or create session
+        session_id = request.session_id or str(uuid.uuid4())
+        
+        chat_session = await get_cached_session(session_id, tenant_id, db)
+        if not chat_session:
+            chat_session = ChatSession(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                session_id=session_id
+            )
+            db.add(chat_session)
+            db.commit()
+        
+        # Save user message
+        user_message = ChatMessage(
+            id=uuid.uuid4(),
+            session_id=chat_session.id,
+            tenant_id=tenant_id,
+            message_type="user",
+            content=request.message
+        )
+        db.add(user_message)
+        db.commit()
+        
+        # Return streaming response
+        return StreamingResponse(
+            stream_chat_response(request.message, tenant_id, session_id, db),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in streaming endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to process streaming chat query"
+        )
+
+@router.post("/stream")
+async def authenticated_stream_chat_query(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """
+    Authenticated streaming chat endpoint for admin interface
+    """
+    try:
+        # Get or create session
+        session_id = request.session_id or str(uuid.uuid4())
+        
+        chat_session = await get_cached_session(session_id, tenant_id, db)
+        if not chat_session:
+            chat_session = ChatSession(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                session_id=session_id
+            )
+            db.add(chat_session)
+            db.commit()
+        
+        # Save user message
+        user_message = ChatMessage(
+            id=uuid.uuid4(),
+            session_id=chat_session.id,
+            tenant_id=tenant_id,
+            message_type="user",
+            content=request.message
+        )
+        db.add(user_message)
+        db.commit()
+        
+        # Return streaming response
+        return StreamingResponse(
+            stream_chat_response(request.message, tenant_id, session_id, db),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in authenticated streaming endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to process streaming chat query"
         )
