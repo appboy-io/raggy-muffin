@@ -5,6 +5,8 @@ import io
 from embedding import chunk_text, embed_chunks
 from db import insert_embeddings
 from extraction import extract_structured_data, normalize_text
+from llm_extraction import extract_structured_data_llm
+from auth import CognitoAuth
 
 def extract_pdf_text(pdf_file):
     """Extract text from a PDF file"""
@@ -34,40 +36,112 @@ def extract_csv_text(csv_file):
         st.error(f"Error processing CSV: {str(e)}")
         return ""
 
+def extract_excel_text(excel_file):
+    """Extract and format text from an Excel file"""
+    try:
+        df = pd.read_excel(excel_file, engine='openpyxl')
+        # Convert DataFrame to a structured text format
+        text_chunks = []
+        
+        for _, row in df.iterrows():
+            # Create a text representation of each row
+            chunk = ""
+            for col in df.columns:
+                if pd.notna(row[col]):
+                    chunk += f"{col}: {row[col]}\n"
+            text_chunks.append(chunk)
+            
+        return "\n\n".join(text_chunks)
+    except Exception as e:
+        st.error(f"Error processing Excel file: {str(e)}")
+        return ""
+
+def extract_text_file(text_file):
+    """Extract text from a plain text file"""
+    try:
+        # Read the text file
+        content = text_file.read()
+        if isinstance(content, bytes):
+            content = content.decode('utf-8')
+        return content
+    except Exception as e:
+        st.error(f"Error processing text file: {str(e)}")
+        return ""
+
 def upload_page():
     st.title("📄 Upload Documents")
-
-    tenant_id = st.text_input("Tenant ID", "default_tenant")
     
-    file_type = st.radio("Select file type:", ["PDF", "CSV"])
+    # Require authentication
+    auth = CognitoAuth()
+    if not auth.is_authenticated():
+        st.warning("🔒 Please log in to upload documents.")
+        st.info("👈 Use the navigation sidebar to sign in or create an account.")
+        return
+    
+    # Get tenant ID from authenticated user
+    tenant_id = auth.get_tenant_id()
+    username = st.session_state.get('username', 'Unknown')
+    
+    st.info(f"👤 **Logged in as:** {username}")
+    st.info(f"🏢 **Uploading to workspace:** {tenant_id[:8]}...")
+    
+    file_type = st.radio("Select file type:", ["PDF", "CSV", "Excel", "Text"])
+    
+    full_text = ""
+    uploaded_file = None
     
     if file_type == "PDF":
         uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
         if uploaded_file:
             full_text = extract_pdf_text(uploaded_file)
             st.success(f"Extracted {len(full_text.split())} words from PDF.")
-    else:  # CSV
+    elif file_type == "CSV":
         uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
         if uploaded_file:
             full_text = extract_csv_text(uploaded_file)
             st.success(f"Processed CSV data with {len(full_text.split())} words.")
+    elif file_type == "Excel":
+        uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx", "xls"])
+        if uploaded_file:
+            full_text = extract_excel_text(uploaded_file)
+            st.success(f"Processed Excel data with {len(full_text.split())} words.")
+    else:  # Text
+        uploaded_file = st.file_uploader("Upload a text file", type=["txt", "md", "rst"])
+        if uploaded_file:
+            full_text = extract_text_file(uploaded_file)
+            st.success(f"Processed text file with {len(full_text.split())} words.")
     
-    if uploaded_file:
+    if uploaded_file and full_text:
         # Add option for structured data extraction
         use_structured_extraction = st.checkbox("Normalize and extract structured data (categories, contacts, services)")
+        
+        # Add option for extraction method if structured extraction is selected
+        extraction_method = "traditional"
+        if use_structured_extraction:
+            extraction_method = st.radio(
+                "Choose extraction method:",
+                ["traditional", "llm"],
+                format_func=lambda x: "Traditional (spaCy + regex)" if x == "traditional" else "LLM-based (AI extraction)",
+                help="Traditional method uses regex patterns and spaCy NER. LLM method uses AI for more flexible extraction."
+            )
         
         if st.button("Extract and Preview Data"):
             with st.spinner("Processing document..."):
                 if use_structured_extraction:
-                    st.info("Extracting structured data...")
-                    extracted_data = extract_structured_data(full_text)
+                    if extraction_method == "llm":
+                        st.info("Extracting structured data using LLM...")
+                        extracted_data = extract_structured_data_llm(full_text, file_type.lower())
+                    else:
+                        st.info("Extracting structured data using traditional methods...")
+                        extracted_data = extract_structured_data(full_text)
                     
                     # Store in session state for later use
                     st.session_state.extracted_data = extracted_data
                     st.session_state.full_text = full_text
                     st.session_state.use_structured = True
+                    st.session_state.extraction_method = extraction_method
                     
-                    show_data_preview(extracted_data, full_text)
+                    show_data_preview(extracted_data, full_text, extraction_method)
                 else:
                     # For raw text, show preview of chunks that will be created
                     st.session_state.full_text = full_text
@@ -78,13 +152,23 @@ def upload_page():
         if hasattr(st.session_state, 'full_text'):
             show_embedding_confirmation(tenant_id)
 
-def show_data_preview(extracted_data, full_text):
+def show_data_preview(extracted_data, full_text, extraction_method="traditional"):
     """Display a preview table of extracted structured data"""
     st.subheader("📋 Data Preview")
-    st.write("Review the extracted data before embedding:")
+    method_label = "LLM-based AI extraction" if extraction_method == "llm" else "Traditional spaCy + regex extraction"
+    st.write(f"Review the extracted data before embedding (using {method_label}):")
     
     # Create preview data for table
     preview_data = []
+    
+    # Add provider name
+    if extracted_data.get("provider_name"):
+        preview_data.append({
+            "Type": "Provider",
+            "Field": "Organization Name",
+            "Value": extracted_data["provider_name"],
+            "Count": 1
+        })
     
     # Add categories
     if extracted_data["categories"]:

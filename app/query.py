@@ -1,11 +1,25 @@
 import streamlit as st
 from rag import retrieve_relevant_chunks, generate_answer
+from auth import CognitoAuth
 import traceback
 
 def query_page():
     st.title("🔎 Ask a Question")
-
-    tenant_id = st.text_input("Tenant ID", "default_tenant")
+    
+    # Require authentication
+    auth = CognitoAuth()
+    if not auth.is_authenticated():
+        st.warning("🔒 Please log in to ask questions.")
+        st.info("👈 Use the navigation sidebar to sign in or create an account.")
+        return
+    
+    # Get tenant ID from authenticated user
+    tenant_id = auth.get_tenant_id()
+    username = st.session_state.get('username', 'Unknown')
+    
+    st.info(f"👤 **Logged in as:** {username}")
+    st.info(f"🏢 **Searching in your workspace:** {tenant_id[:8]}...")
+    
     question = st.text_input("Enter your question:")
     
     # Add debug mode toggle

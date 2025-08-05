@@ -1,0 +1,265 @@
+services:
+  db:
+    image: ankane/pgvector
+    container_name: cleona_pgvector
+    restart: always
+    environment:
+      POSTGRES_USER: cleona_user
+      POSTGRES_PASSWORD: cleona_secure_pass_2024
+      POSTGRES_DB: cleona_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - cleona_pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  redis:
+    image: redis:7-alpine
+    container_name: cleona_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - cleona_redis_data:/data
+    command: redis-server --appendonly yes
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
+
+  api:
+    build: ./api
+    container_name: cleona_api
+    restart: always
+    ports:
+      - "8004:8000"
+    depends_on:
+      - db
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    env_file:
+      - .env.cleona
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
+      
+      # Redis Configuration
+      REDIS_URL: redis://redis:6379
+      
+      # AWS Cognito loaded from .env.cleona
+      
+      # Cleona Branding Configuration
+      BRAND_NAME: Cleona
+      BRAND_LOGO: 🏥
+      PRIMARY_COLOR: "#2E8B57"
+      SECONDARY_COLOR: "#4682B4"
+      
+      # API Configuration
+      API_BASE_URL: https://cleona.ragamuffin.app
+      
+      # Domains
+      WIDGET_DOMAIN: https://cleona.ragamuffin.app
+      ADMIN_DOMAIN: https://cleona.ragamuffin.app/admin
+      CORS_ORIGINS: https://cleona.ragamuffin.app,http://localhost:3004,http://localhost:3001,http://localhost:8503
+      
+      # Feature Limits
+      MAX_DOCUMENTS_PER_TENANT: 100
+      MAX_QUERIES_PER_DAY: 1000
+      MAX_FILE_SIZE_MB: 50
+      
+      # Security
+      SECRET_KEY: cleona-secret-key-change-this-in-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+
+  admin-ui:
+    build: 
+      context: ./admin-ui
+      args:
+        REACT_APP_API_URL: https://cleona.ragamuffin.app
+    container_name: cleona_admin_ui
+    restart: always
+    ports:
+      - "3004:3000"
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
+    environment:
+      REACT_APP_API_URL: https://cleona.ragamuffin.app
+      REACT_APP_WIDGET_DOMAIN: https://cleona.ragamuffin.app
+      REACT_APP_BRAND_NAME: Cleona
+      REACT_APP_BRAND_LOGO: "🏥"
+      REACT_APP_PRIMARY_COLOR: "#2E8B57"
+      REACT_APP_SECONDARY_COLOR: "#4682B4"
+
+  frontend-ui:
+    build: 
+      context: ./frontend-ui
+      args:
+        REACT_APP_API_URL: https://cleona.ragamuffin.app
+        PUBLIC_URL: /frontend
+    container_name: cleona_frontend_ui
+    restart: always
+    ports:
+      - "3005:3000"
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    environment:
+      REACT_APP_API_URL: https://cleona.ragamuffin.app
+      REACT_APP_WIDGET_DOMAIN: https://cleona.ragamuffin.app
+      REACT_APP_BRAND_NAME: Cleona
+      REACT_APP_BRAND_LOGO: "🏥"
+      REACT_APP_PRIMARY_COLOR: "#2E8B57"
+      REACT_APP_SECONDARY_COLOR: "#4682B4"
+      PUBLIC_URL: /frontend
+
+  app:
+    build: .
+    container_name: cleona_streamlit
+    ports:
+      - "8503:8501"
+    depends_on:
+      - db
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    env_file:
+      - .env.cleona
+    environment:
+      # Database Configuration
+      DB_CONN: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
+      DATABASE_URL: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
+      
+      # Cleona Branding Configuration (for legacy Streamlit)
+      APP_NAME: Cleona
+      APP_ICON: 🏥
+      APP_TAGLINE: Your AI Assistant for Medical Information & Government Resources
+      APP_DESCRIPTION: Get instant access to medical information and government assistance programs. Cleona helps you find healthcare resources, housing assistance, and social services in your area.
+      
+      # Pricing Configuration
+      STARTER_PLAN_PRICE: $29
+      STARTER_PLAN_PERIOD: month
+      FREE_TRIAL_DAYS: 7
+      STARTER_PLAN_PAGES: 500
+      
+      # Color Theme (Healthcare/Government focused)
+      PRIMARY_COLOR: "#2E8B57"
+      SECONDARY_COLOR: "#4682B4"
+      ACCENT_COLOR: "#f0f8ff"
+      
+      # Company Information
+      COMPANY_NAME: Cleona Health & Services Inc.
+      SUPPORT_EMAIL: support@cleona.ai
+      WEBSITE_URL: https://cleona.ai
+      
+      # AWS Cognito loaded from .env.cleona
+      
+      # Domains
+      ADMIN_DOMAIN: https://cleona.ragamuffin.app/admin
+      WIDGET_DOMAIN: https://cleona.ragamuffin.app
+      
+      # Features
+      FEATURE_1_TITLE: Medical Information Access
+      FEATURE_1_ICON: 🩺
+      FEATURE_1_DESC: Get accurate medical information and find healthcare providers in your area instantly.
+      FEATURE_1_QUOTE: Cleona helped me understand my diagnosis and find the right specialist
+      
+      FEATURE_2_TITLE: Government Resource Navigator
+      FEATURE_2_ICON: 🏛️
+      FEATURE_2_DESC: Find housing assistance, food programs, and social services available in your community.
+      FEATURE_2_QUOTE: Finally found the housing assistance I needed through Cleona
+      
+      FEATURE_3_TITLE: Secure & Private
+      FEATURE_3_ICON: 🔒
+      FEATURE_3_DESC: Your personal health and financial information stays completely private and secure.
+      FEATURE_3_QUOTE: I trust Cleona with my sensitive health questions
+      
+      # Testimonials
+      TESTIMONIAL_1_TEXT: Cleona made navigating the healthcare system so much easier. I found a specialist for my condition and learned about assistance programs I never knew existed.
+      TESTIMONIAL_1_AUTHOR: Maria Rodriguez
+      TESTIMONIAL_1_TITLE: Healthcare Navigator User
+      
+      TESTIMONIAL_2_TEXT: When I lost my job, Cleona helped me find emergency housing assistance and food programs. It was a lifeline during a difficult time.
+      TESTIMONIAL_2_AUTHOR: James Thompson
+      TESTIMONIAL_2_TITLE: Government Resources User
+      
+      # Social Proof
+      SOCIAL_PROOF_TEXT: Trusted by thousands seeking healthcare and government assistance
+      
+      # CTA Configuration
+      CTA_PRIMARY_TEXT: GET STARTED
+      CTA_SECONDARY_TEXT: START FREE CONSULTATION
+      CTA_TRIAL_TEXT: Start your 7-day free trial
+      
+      # Streamlit Configuration
+      STREAMLIT_PAGE_TITLE: Cleona - Healthcare & Government Resources AI
+      STREAMLIT_PAGE_ICON: 🏥
+      STREAMLIT_LAYOUT: wide
+      
+      # How It Works Steps
+      STEP_1_TITLE: Describe Your Need
+      STEP_1_DESC: Tell us about your medical or assistance needs
+      STEP_1_DETAILS: "- Health questions or symptoms\\n- Housing or financial assistance\\n- Government program eligibility"
+      
+      STEP_2_TITLE: AI Analysis
+      STEP_2_DESC: Cleona analyzes your request
+      STEP_2_DETAILS: "- Medical information matching\\n- Resource eligibility checking\\n- Local program availability"
+      
+      STEP_3_TITLE: Get Resources
+      STEP_3_DESC: Receive personalized recommendations
+      STEP_3_DETAILS: "- Healthcare provider contacts\\n- Government program details\\n- Application assistance"
+      
+      STEP_4_TITLE: Take Action
+      STEP_4_DESC: Connect with services and support
+      STEP_4_DETAILS: "- Direct contact information\\n- Application guidance\\n- Follow-up resources"
+      
+      # Features and Benefits
+      SUPPORTED_FORMATS: Medical records, Insurance documents, Government forms, Healthcare guides, Benefit applications
+      USE_CASES: Medical information lookup, Healthcare provider search, Government benefit eligibility, Housing assistance finder, Food program locator
+      STARTER_PLAN_FEATURES: 500 queries/month|Unlimited medical Q&A|Government resource finder|Healthcare provider directory|Email support
+      TRIAL_BENEFITS: Government resource matching|Healthcare provider search|Application assistance|Priority support|All features unlocked for 7 days
+    volumes:
+      - ./app:/app
+
+volumes:
+  cleona_pgdata:
+  cleona_redis_data:
