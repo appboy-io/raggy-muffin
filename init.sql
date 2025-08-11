@@ -1,17 +1,8 @@
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Drop existing tables if they exist (for clean recreation)
-DROP TABLE IF EXISTS chat_messages CASCADE;
-DROP TABLE IF EXISTS chat_sessions CASCADE;
-DROP TABLE IF EXISTS widget_configs CASCADE;
-DROP TABLE IF EXISTS customer_profiles CASCADE;
-DROP TABLE IF EXISTS tenant_usage CASCADE;
-DROP TABLE IF EXISTS documents CASCADE;
-DROP TABLE IF EXISTS embeddings CASCADE;
-
 -- Embeddings table for vector search
-CREATE TABLE embeddings (
+CREATE TABLE IF NOT EXISTS embeddings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -22,11 +13,11 @@ CREATE TABLE embeddings (
 );
 
 -- Create indexes for embeddings
-CREATE INDEX idx_embeddings_tenant_id ON embeddings(tenant_id);
-CREATE INDEX idx_embeddings_meta_data ON embeddings USING GIN(meta_data);
+CREATE INDEX IF NOT EXISTS idx_embeddings_tenant_id ON embeddings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_embeddings_meta_data ON embeddings USING GIN(meta_data);
 
 -- Documents table for file management
-CREATE TABLE documents (
+CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
     filename TEXT NOT NULL,
@@ -41,12 +32,12 @@ CREATE TABLE documents (
 );
 
 -- Create indexes for documents
-CREATE INDEX idx_documents_tenant_id ON documents(tenant_id);
-CREATE INDEX idx_documents_status ON documents(status);
-CREATE INDEX idx_documents_meta_data ON documents USING GIN(meta_data);
+CREATE INDEX IF NOT EXISTS idx_documents_tenant_id ON documents(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+CREATE INDEX IF NOT EXISTS idx_documents_meta_data ON documents USING GIN(meta_data);
 
 -- Chat sessions table
-CREATE TABLE chat_sessions (
+CREATE TABLE IF NOT EXISTS chat_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
     session_id TEXT NOT NULL,
@@ -55,11 +46,11 @@ CREATE TABLE chat_sessions (
 );
 
 -- Create indexes for chat sessions
-CREATE INDEX idx_chat_sessions_tenant_id ON chat_sessions(tenant_id);
-CREATE INDEX idx_chat_sessions_session_id ON chat_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_tenant_id ON chat_sessions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_session_id ON chat_sessions(session_id);
 
 -- Chat messages table
-CREATE TABLE chat_messages (
+CREATE TABLE IF NOT EXISTS chat_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id UUID NOT NULL,
     tenant_id TEXT NOT NULL,
@@ -70,12 +61,12 @@ CREATE TABLE chat_messages (
 );
 
 -- Create indexes for chat messages
-CREATE INDEX idx_chat_messages_session_id ON chat_messages(session_id);
-CREATE INDEX idx_chat_messages_tenant_id ON chat_messages(tenant_id);
-CREATE INDEX idx_chat_messages_meta_data ON chat_messages USING GIN(meta_data);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_tenant_id ON chat_messages(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_meta_data ON chat_messages USING GIN(meta_data);
 
 -- Tenant usage tracking table
-CREATE TABLE tenant_usage (
+CREATE TABLE IF NOT EXISTS tenant_usage (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -87,11 +78,11 @@ CREATE TABLE tenant_usage (
 );
 
 -- Create indexes for tenant usage
-CREATE INDEX idx_tenant_usage_tenant_id ON tenant_usage(tenant_id);
-CREATE INDEX idx_tenant_usage_date ON tenant_usage(date);
+CREATE INDEX IF NOT EXISTS idx_tenant_usage_tenant_id ON tenant_usage(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_usage_date ON tenant_usage(date);
 
 -- Customer profiles table
-CREATE TABLE customer_profiles (
+CREATE TABLE IF NOT EXISTS customer_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL UNIQUE,
     company_name TEXT NOT NULL,
@@ -109,11 +100,16 @@ CREATE TABLE customer_profiles (
 );
 
 -- Create indexes for customer profiles
-CREATE UNIQUE INDEX idx_customer_profiles_tenant_id ON customer_profiles(tenant_id);
-CREATE INDEX idx_customer_profiles_meta_data ON customer_profiles USING GIN(meta_data);
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_customer_profiles_tenant_id') THEN
+        CREATE UNIQUE INDEX idx_customer_profiles_tenant_id ON customer_profiles(tenant_id);
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_customer_profiles_meta_data ON customer_profiles USING GIN(meta_data);
 
 -- Widget configurations table
-CREATE TABLE widget_configs (
+CREATE TABLE IF NOT EXISTS widget_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL UNIQUE,
     widget_title TEXT DEFAULT 'Chat Assistant',
@@ -133,8 +129,13 @@ CREATE TABLE widget_configs (
 );
 
 -- Create indexes for widget configs
-CREATE UNIQUE INDEX idx_widget_configs_tenant_id ON widget_configs(tenant_id);
-CREATE INDEX idx_widget_configs_meta_data ON widget_configs USING GIN(meta_data);
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_widget_configs_tenant_id') THEN
+        CREATE UNIQUE INDEX idx_widget_configs_tenant_id ON widget_configs(tenant_id);
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_widget_configs_meta_data ON widget_configs USING GIN(meta_data);
 
 -- Performance Optimization: Composite Indexes for Common Query Patterns
 -- These indexes significantly improve query performance for multi-tenant operations
@@ -142,32 +143,32 @@ CREATE INDEX idx_widget_configs_meta_data ON widget_configs USING GIN(meta_data)
 -- High Priority Composite Indexes
 
 -- 1. Embeddings vector search with tenant filtering (Most Critical for RAG performance)
-CREATE INDEX idx_embeddings_tenant_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS idx_embeddings_tenant_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- 2. Chat session compound lookup (tenant + session_id)
-CREATE INDEX idx_chat_sessions_tenant_session ON chat_sessions(tenant_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_tenant_session ON chat_sessions(tenant_id, session_id);
 
 -- 3. Chat messages by session and time (for message history)
-CREATE INDEX idx_chat_messages_session_created ON chat_messages(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created ON chat_messages(session_id, created_at);
 
 -- 4. Chat sessions by tenant and activity (for session listing)
-CREATE INDEX idx_chat_sessions_tenant_activity ON chat_sessions(tenant_id, last_activity DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_tenant_activity ON chat_sessions(tenant_id, last_activity DESC);
 
 -- Medium Priority Composite Indexes
 
 -- 5. Document status by tenant (for filtering)
-CREATE INDEX idx_documents_tenant_status ON documents(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_documents_tenant_status ON documents(tenant_id, status);
 
 -- 6. Tenant usage time series (for analytics)
-CREATE INDEX idx_tenant_usage_tenant_date ON tenant_usage(tenant_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_tenant_usage_tenant_date ON tenant_usage(tenant_id, date DESC);
 
 -- 7. Chat messages by tenant and type (for analytics)
-CREATE INDEX idx_chat_messages_tenant_type ON chat_messages(tenant_id, message_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_tenant_type ON chat_messages(tenant_id, message_type, created_at);
 
 -- Additional Performance Indexes
 
 -- 8. Document ordering by tenant and creation time
-CREATE INDEX idx_documents_tenant_created ON documents(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_documents_tenant_created ON documents(tenant_id, created_at DESC);
 
 -- 9. Embeddings with document metadata filtering
-CREATE INDEX idx_embeddings_tenant_meta ON embeddings(tenant_id) WHERE meta_data ? 'document_id';
+CREATE INDEX IF NOT EXISTS idx_embeddings_tenant_meta ON embeddings(tenant_id) WHERE meta_data ? 'document_id';

@@ -391,23 +391,109 @@ async def stream_chat_response(
         yield f"data: {json.dumps(error_data)}\n\n"
 
 async def generate_streaming_response(message: str, context_chunks: List[str]) -> AsyncGenerator[str, None]:
-    """Generate streaming response using Ollama"""
+    """Generate streaming response using Ollama with same formatting as non-streaming"""
     try:
         # Import here to avoid circular imports
         import ollama
         import os
+        from app.core.rag import extract_contact_info, extract_categories_from_chunks
+        import re
         
-        # Prepare context
-        context = "\n---\n".join(context_chunks) if context_chunks else ""
+        # Extract structured data for context
+        chunk_categories = extract_categories_from_chunks(context_chunks) if context_chunks else []
+        contact_info = extract_contact_info(context_chunks) if context_chunks else {}
+        providers = []
+        descriptions = []
         
-        # Create prompt
-        system_prompt = """You are Clara, a helpful and empathetic assistant that connects people with local aid services and resources."""
+        # Extract providers from context chunks
+        if context_chunks:
+            for chunk in context_chunks:
+                # Look for patterns like "● Name, MD" or "● Name, NP"
+                provider_matches = re.findall(r'●\s*([^●\n]+?(?:,\s*(?:MD|NP|DO|PA|RN))[^●\n]*)', chunk)
+                for match in provider_matches:
+                    provider = match.strip()
+                    if provider and provider not in providers:
+                        providers.append(provider)
+                
+                # Also look for structured format
+                if "PROVIDER:" in chunk:
+                    provider = chunk.split("PROVIDER:")[1].split('\n')[0].strip()
+                    if provider and provider not in providers:
+                        providers.append(provider)
+                if "DESCRIPTION:" in chunk:
+                    desc = chunk.split("DESCRIPTION:")[1].strip()
+                    if desc:
+                        descriptions.append(desc)
         
+        # Create detailed system prompt (same as non-streaming version)
+        system_prompt = """You are Clara, a helpful and empathetic assistant that connects people with local aid services and resources. You have access to a database of service providers and organizations that offer various types of assistance.
+
+Your personality:
+- Warm, caring, and encouraging
+- Patient and understanding of people's situations
+- Professional but approachable
+- Always try to be helpful, even for general questions
+- Acknowledge when someone seems urgent or stressed
+- Guide people toward finding the help they need
+
+IMPORTANT FORMATTING RULES:
+1. Use plain text formatting, NOT markdown
+2. For bullet points, use "•" (bullet character), not "*" or "-"
+3. For section headers, use plain text with colons (like "Available Providers (3 found):")
+4. Always include proper line breaks between sections
+5. Structure your response like this example:
+
+I understand this is urgent. Here are the resources I found for your immediate needs.
+
+Available Providers (3 found):
+• Provider Name, MD - specialty (phone number)
+• Another Provider, NP - details (phone number)
+
+How to Get Started:
+• Call: (phone number)
+• Visit: website
+
+Next Steps:
+• Call the phone number above right away
+• Don't hesitate to ask questions
+
+When someone asks about services:
+1. If you have relevant information, provide it in a structured, easy-to-read format
+2. Include provider names, service categories, descriptions, and contact information
+3. Give practical next steps and encouraging guidance
+4. Handle emergency situations with appropriate urgency
+
+When someone asks general questions or greets you:
+1. Respond warmly and conversationally
+2. Gently guide them toward asking about services if appropriate
+3. Explain what kind of help you can provide
+
+Always be encouraging and remind people that help is available."""
+        
+        # Create detailed user prompt with structured information
         user_prompt = f"""User Question: {message}
 
-Available Information: {context}
+Available Information:
+"""
+        
+        if context_chunks:
+            user_prompt += f"""
+Service Categories: {', '.join(chunk_categories) if chunk_categories else 'Not specified'}
+Providers: {', '.join(providers) if providers else 'Not specified'}
+Descriptions: {'; '.join(descriptions[:2]) if descriptions else 'Not available'}
+
+Contact Information:
+- Phones: {', '.join(contact_info.get('phones', [])) if contact_info.get('phones') else 'Not available'}
+- Emails: {', '.join(contact_info.get('emails', [])) if contact_info.get('emails') else 'Not available'}
+- Websites: {', '.join(contact_info.get('websites', [])) if contact_info.get('websites') else 'Not available'}
+- Addresses: {', '.join(contact_info.get('addresses', [])) if contact_info.get('addresses') else 'Not available'}
 
 Please provide a helpful response based on this information."""
+        else:
+            user_prompt += """
+No specific service information was found for this question.
+
+Please respond helpfully. If this is a greeting or general question, respond conversationally and guide them toward asking about services. If they're asking about services but no information was found, explain this warmly and suggest they try rephrasing or ask about other topics."""
         
         # Stream from Ollama
         host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
@@ -421,32 +507,45 @@ Please provide a helpful response based on this information."""
                     {'role': 'user', 'content': user_prompt}
                 ],
                 stream=True,
-                options={'host': host}
+                options={'host': host, 'temperature': 0.7}
             )
         
         # Run Ollama stream in executor to avoid blocking
         loop = asyncio.get_event_loop()
         stream_generator = await loop.run_in_executor(None, ollama_stream)
         
+        # Buffer for accumulating words to send in readable chunks
+        word_buffer = []
         for chunk in stream_generator:
             if 'message' in chunk and 'content' in chunk['message']:
                 content = chunk['message']['content']
                 if content:
-                    yield content
-                    # Small delay to prevent overwhelming the client
-                    await asyncio.sleep(0.01)
+                    # Add words to buffer
+                    words = content.split()
+                    word_buffer.extend(words)
+                    
+                    # Send buffer when we have enough words (3-5 words) or hit punctuation
+                    if len(word_buffer) >= 3 or any(word.endswith(('.', '!', '?', ':')) for word in word_buffer):
+                        chunk_text = ' '.join(word_buffer) + ' '
+                        yield chunk_text
+                        word_buffer = []
+                        await asyncio.sleep(0.02)
+        
+        # Send any remaining words in buffer
+        if word_buffer:
+            yield ' '.join(word_buffer)
                     
     except Exception as e:
         logger.error(f"Error in Ollama streaming: {e}")
         # Fallback to non-streaming
         from app.core.rag import generate_single_prompt_response
         response = await generate_single_prompt_response(message, context_chunks)
-        # Simulate streaming by sending chunks
+        # Simulate streaming by sending readable chunks
         words = response.split()
-        for i in range(0, len(words), 3):  # Send 3 words at a time
-            chunk = " ".join(words[i:i+3]) + " "
+        for i in range(0, len(words), 4):  # Send 4 words at a time for better readability
+            chunk = " ".join(words[i:i+4]) + " "
             yield chunk
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.08)  # Slightly slower for better readability
 
 @router.post("/{tenant_id}/stream")
 @rate_limit_chat_endpoints()

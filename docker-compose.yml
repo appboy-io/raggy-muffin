@@ -14,30 +14,21 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
   ollama:
-    image: ollama/ollama:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
     container_name: rag_ollama
     restart: always
     ports:
       - "11434:11434"
     volumes:
       - ollama:/root/.ollama
-    environment:
-      - OLLAMA_KEEP_ALIVE=24h
-      - OLLAMA_NUM_PARALLEL=2
-      - OLLAMA_MAX_LOADED_MODELS=2
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
-    command: >
-      sh -c "ollama serve &
-      sleep 10 &&
-      ollama pull nomic-embed-text &&
-      ollama pull llama3.2:3b-instruct-q4_0 &&
-      ollama pull mistral:7b-instruct-q4_0 &&
-      wait"
 
   app:
     build: .

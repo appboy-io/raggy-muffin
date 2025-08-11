@@ -221,3 +221,12 @@ IMPORTANT: Return ONLY the JSON object, no additional text."""
             sections.append(f"DESCRIPTION: {extracted_data['description']}")
         
         return "\n\n".join(sections)
+
+# Standalone function for compatibility with existing code
+def extract_structured_data_llm(text, file_type="text"):
+    """
+    Standalone function that creates an LLMDataExtractor instance and extracts data.
+    This function maintains compatibility with existing import statements.
+    """
+    extractor = LLMDataExtractor()
+    return extractor.extract_structured_data(text, file_type)
