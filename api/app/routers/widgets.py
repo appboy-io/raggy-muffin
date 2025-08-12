@@ -219,6 +219,10 @@ async def get_widget_embed_script(
         avatarUrl: '{escape_js_string(widget_config.avatar_url or "")}'
     }};
     
+    let isOpen = false;
+    let sessionId = null;
+    let messages = [];
+    
     // Create widget container
     function createWidget() {{
         const container = document.createElement('div');
@@ -233,6 +237,7 @@ async def get_widget_embed_script(
         
         // Chat toggle button
         const toggleBtn = document.createElement('div');
+        toggleBtn.id = 'chat-widget-toggle';
         toggleBtn.style.cssText = `
             width: 60px;
             height: 60px;
@@ -245,17 +250,256 @@ async def get_widget_embed_script(
             cursor: pointer;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             font-size: 24px;
+            transition: all 0.3s ease;
         `;
         toggleBtn.innerHTML = '💬';
         toggleBtn.onclick = toggleChat;
         
+        // Chat window
+        const chatWindow = document.createElement('div');
+        chatWindow.id = 'chat-widget-window';
+        chatWindow.style.cssText = `
+            position: absolute;
+            bottom: 80px;
+            right: 0;
+            width: 350px;
+            height: 500px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        `;
+        
+        createChatWindow(chatWindow);
+        
         container.appendChild(toggleBtn);
+        container.appendChild(chatWindow);
         document.body.appendChild(container);
     }}
     
+    function createChatWindow(chatWindow) {{
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = `
+            background: ${{CONFIG.primaryColor}};
+            color: white;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        `;
+        
+        const headerText = document.createElement('div');
+        headerText.innerHTML = `
+            <div style="font-weight: 600; font-size: 16px;">${{CONFIG.title}}</div>
+            <div style="font-size: 12px; opacity: 0.8;">${{CONFIG.subtitle}}</div>
+        `;
+        
+        const closeBtn = document.createElement('div');
+        closeBtn.innerHTML = '✕';
+        closeBtn.style.cssText = `
+            cursor: pointer;
+            font-size: 18px;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        `;
+        closeBtn.onclick = toggleChat;
+        
+        header.appendChild(headerText);
+        header.appendChild(closeBtn);
+        
+        // Messages container
+        const messagesContainer = document.createElement('div');
+        messagesContainer.id = 'chat-messages';
+        messagesContainer.style.cssText = `
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            background: #f8f9fa;
+        `;
+        
+        // Welcome message
+        if (CONFIG.welcomeMessage) {{
+            const welcomeMsg = createMessageBubble(CONFIG.welcomeMessage, false);
+            messagesContainer.appendChild(welcomeMsg);
+        }}
+        
+        // Input container
+        const inputContainer = document.createElement('div');
+        inputContainer.style.cssText = `
+            padding: 16px;
+            border-top: 1px solid #e9ecef;
+            background: white;
+        `;
+        
+        const inputWrapper = document.createElement('div');
+        inputWrapper.style.cssText = `
+            display: flex;
+            gap: 8px;
+            align-items: end;
+        `;
+        
+        const messageInput = document.createElement('textarea');
+        messageInput.id = 'chat-input';
+        messageInput.placeholder = CONFIG.placeholder;
+        messageInput.style.cssText = `
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            padding: 12px 16px;
+            resize: none;
+            max-height: 100px;
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        `;
+        
+        const sendBtn = document.createElement('button');
+        sendBtn.innerHTML = '➤';
+        sendBtn.style.cssText = `
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: ${{CONFIG.primaryColor}};
+            color: white;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        // Event listeners
+        sendBtn.onclick = () => sendMessage(messageInput.value);
+        messageInput.onkeypress = (e) => {{
+            if (e.key === 'Enter' && !e.shiftKey) {{
+                e.preventDefault();
+                sendMessage(messageInput.value);
+            }}
+        }};
+        
+        inputWrapper.appendChild(messageInput);
+        inputWrapper.appendChild(sendBtn);
+        inputContainer.appendChild(inputWrapper);
+        
+        chatWindow.appendChild(header);
+        chatWindow.appendChild(messagesContainer);
+        chatWindow.appendChild(inputContainer);
+    }}
+    
+    function createMessageBubble(content, isUser) {{
+        const bubble = document.createElement('div');
+        bubble.style.cssText = `
+            margin-bottom: 12px;
+            display: flex;
+            ${{isUser ? 'justify-content: flex-end;' : 'justify-content: flex-start;'}}
+        `;
+        
+        const message = document.createElement('div');
+        message.style.cssText = `
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            font-size: 14px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            ${{isUser 
+                ? `background: ${{CONFIG.primaryColor}}; color: white; border-bottom-right-radius: 6px;`
+                : 'background: white; color: #333; border: 1px solid #e9ecef; border-bottom-left-radius: 6px;'
+            }}
+        `;
+        message.textContent = content;
+        
+        bubble.appendChild(message);
+        return bubble;
+    }}
+    
+    async function sendMessage(content) {{
+        if (!content.trim()) return;
+        
+        const messageInput = document.getElementById('chat-input');
+        const messagesContainer = document.getElementById('chat-messages');
+        
+        // Clear input
+        messageInput.value = '';
+        
+        // Add user message
+        const userBubble = createMessageBubble(content, true);
+        messagesContainer.appendChild(userBubble);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        
+        // Add loading indicator
+        const loadingBubble = createMessageBubble('...', false);
+        loadingBubble.id = 'loading-message';
+        messagesContainer.appendChild(loadingBubble);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        
+        try {{
+            const response = await fetch(`${{API_BASE}}/api/v1/chat/${{TENANT_ID}}/query`, {{
+                method: 'POST',
+                headers: {{
+                    'Content-Type': 'application/json',
+                }},
+                body: JSON.stringify({{
+                    message: content,
+                    session_id: sessionId
+                }})
+            }});
+            
+            if (!response.ok) {{
+                throw new Error('Failed to send message');
+            }}
+            
+            const data = await response.json();
+            
+            // Remove loading message
+            const loading = document.getElementById('loading-message');
+            if (loading) loading.remove();
+            
+            // Add assistant response
+            const assistantBubble = createMessageBubble(data.answer, false);
+            messagesContainer.appendChild(assistantBubble);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Store session ID
+            if (data.session_id && !sessionId) {{
+                sessionId = data.session_id;
+            }}
+            
+        }} catch (error) {{
+            console.error('Chat error:', error);
+            
+            // Remove loading message
+            const loading = document.getElementById('loading-message');
+            if (loading) loading.remove();
+            
+            // Show error message
+            const errorBubble = createMessageBubble('Sorry, I encountered an error. Please try again.', false);
+            messagesContainer.appendChild(errorBubble);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }}
+    }}
+    
     function toggleChat() {{
-        // Chat implementation would go here
-        alert('Chat widget clicked! Integration with React chat UI needed.');
+        const chatWindow = document.getElementById('chat-widget-window');
+        const toggleBtn = document.getElementById('chat-widget-toggle');
+        
+        isOpen = !isOpen;
+        
+        if (isOpen) {{
+            chatWindow.style.display = 'flex';
+            toggleBtn.innerHTML = '✕';
+        }} else {{
+            chatWindow.style.display = 'none';
+            toggleBtn.innerHTML = '💬';
+        }}
     }}
     
     // Initialize widget when DOM is ready

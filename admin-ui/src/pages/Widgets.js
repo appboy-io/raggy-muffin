@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { Link } from 'react-router-dom';
 import { widgetsAPI } from '../services/api';
 import { useConfig } from '../context/ConfigContext';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +9,7 @@ import {
   EyeIcon,
   ClipboardDocumentIcon,
   CheckIcon,
+  ComputerDesktopIcon,
 } from '@heroicons/react/24/outline';
 
 export default function Widgets() {
@@ -251,14 +253,22 @@ export default function Widgets() {
               </div>
               <div className={`w-3 h-3 rounded-full ${formData.is_enabled ? 'bg-green-400' : 'bg-red-400'}`}></div>
             </div>
-            <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
               <button
                 onClick={openPreview}
                 className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-500"
               >
                 <EyeIcon className="h-5 w-5" />
-                <span>Preview Widget</span>
+                <span>Preview Widget (New Tab)</span>
               </button>
+              
+              <Link
+                to="/test-site"
+                className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-500"
+              >
+                <ComputerDesktopIcon className="h-5 w-5" />
+                <span>Test Widget in Sample Site</span>
+              </Link>
             </div>
           </div>
 

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.dependencies import get_current_tenant_id, get_optional_user
-from app.models import ChatSession, ChatMessage
+from app.models import ChatSession, ChatMessage, CustomerProfile
 from app.core.rag import retrieve_relevant_chunks, generate_answer
 from app.utils.rate_limit import rate_limit_chat_endpoints
 # from app.cache import cached, cache
@@ -18,6 +18,55 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+def check_widget_cors(request: Request, tenant_id: str, db: Session) -> bool:
+    """Check if the request origin is allowed for the given tenant"""
+    try:
+        # Get the origin from the request
+        origin = request.headers.get("origin")
+        if not origin:
+            # No origin header means this is likely a same-origin request
+            return True
+        
+        # Get tenant's allowed domains
+        profile = db.query(CustomerProfile).filter(
+            CustomerProfile.tenant_id == tenant_id
+        ).first()
+        
+        if not profile:
+            logger.warning(f"No profile found for tenant {tenant_id}")
+            return False
+        
+        allowed_domains = profile.allowed_domains or ["*"]
+        
+        # Check if all domains are allowed
+        if "*" in allowed_domains:
+            return True
+        
+        # Check if the origin matches any allowed domain
+        for domain in allowed_domains:
+            if origin.endswith(f"//{domain}") or origin == f"https://{domain}" or origin == f"http://{domain}":
+                return True
+        
+        logger.warning(f"Origin {origin} not allowed for tenant {tenant_id}. Allowed: {allowed_domains}")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error checking CORS for tenant {tenant_id}: {e}")
+        return False
+
+def get_cors_headers(origin: str = None) -> Dict[str, str]:
+    """Get appropriate CORS headers"""
+    headers = {
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "3600"
+    }
+    
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+    
+    return headers
 
 class ChatRequest(BaseModel):
     message: str
@@ -58,23 +107,52 @@ async def batch_add_messages(db: Session, messages: List[ChatMessage]) -> None:
         logger.error(f"Error batch adding messages: {e}")
         raise
 
-@router.post("/{tenant_id}/query", response_model=ChatResponse)
+@router.options("/{tenant_id}/query")
+async def chat_query_options(
+    tenant_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Handle preflight OPTIONS requests for CORS"""
+    origin = request.headers.get("origin")
+    
+    if not check_widget_cors(request, tenant_id, db):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Origin not allowed"},
+            headers=get_cors_headers()
+        )
+    
+    return JSONResponse(
+        content={"status": "ok"},
+        headers=get_cors_headers(origin)
+    )
+
+@router.post("/{tenant_id}/query")
 @rate_limit_chat_endpoints()
 async def chat_query(
     tenant_id: str,
-    request: ChatRequest,
-    http_request: Request,
-    db: Session = Depends(get_db),
-    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user)
+    chat_request: ChatRequest,
+    request: Request,
+    db: Session = Depends(get_db)
 ):
     """
     Public chat endpoint for widgets - rate limited for protection
     """
     try:
+        # Check CORS for widget embedding
+        origin = request.headers.get("origin")
+        if not check_widget_cors(request, tenant_id, db):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Origin not allowed for this tenant"},
+                headers=get_cors_headers()
+            )
+        
         # Rate limiting implemented via decorator
         
         # Get or create session
-        session_id = request.session_id
+        session_id = chat_request.session_id
         if not session_id:
             session_id = str(uuid.uuid4())
             
@@ -106,13 +184,13 @@ async def chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=request.message
+            content=chat_request.message
         )
         
         # Retrieve relevant context
-        logger.error(f"Chat query: '{request.message}' for tenant: {tenant_id}")
+        logger.error(f"Chat query: '{chat_request.message}' for tenant: {tenant_id}")
         context_chunks = await retrieve_relevant_chunks(
-            query=request.message,
+            query=chat_request.message,
             tenant_id=tenant_id,
             db=db,
             top_k=4
@@ -120,7 +198,7 @@ async def chat_query(
         logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
-        response_data = await generate_answer(request.message, context_chunks)
+        response_data = await generate_answer(chat_request.message, context_chunks)
         
         # Prepare assistant response
         assistant_message = ChatMessage(
@@ -145,21 +223,29 @@ async def chat_query(
         
         db.commit()
         
-        return ChatResponse(
-            answer=response_data["answer"],
-            session_id=session_id,
-            sources=response_data["sources"],
-            contact_info=response_data["contact_info"],
-            categories=response_data["categories"],
-            providers=response_data["providers"],
-            message_id=str(assistant_message.id)
+        # Prepare response data
+        response_content = {
+            "answer": response_data["answer"],
+            "session_id": session_id,
+            "sources": response_data["sources"],
+            "contact_info": response_data["contact_info"],
+            "categories": response_data["categories"],
+            "providers": response_data["providers"],
+            "message_id": str(assistant_message.id)
+        }
+        
+        # Return with CORS headers
+        return JSONResponse(
+            content=response_content,
+            headers=get_cors_headers(origin)
         )
         
     except Exception as e:
         logger.error(f"Error processing chat query for tenant {tenant_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to process chat query"
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Failed to process chat query"},
+            headers=get_cors_headers(origin)
         )
 
 @router.post("/query", response_model=ChatResponse)
@@ -173,7 +259,7 @@ async def authenticated_chat_query(
     """
     try:
         # Get or create session
-        session_id = request.session_id or str(uuid.uuid4())
+        session_id = chat_request.session_id or str(uuid.uuid4())
         
         chat_session = await get_cached_session(session_id, tenant_id, db)
         
@@ -191,13 +277,13 @@ async def authenticated_chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=request.message
+            content=chat_request.message
         )
         
         # Retrieve relevant context
-        logger.error(f"Chat query: '{request.message}' for tenant: {tenant_id}")
+        logger.error(f"Chat query: '{chat_request.message}' for tenant: {tenant_id}")
         context_chunks = await retrieve_relevant_chunks(
-            query=request.message,
+            query=chat_request.message,
             tenant_id=tenant_id,
             db=db,
             top_k=4
@@ -205,7 +291,7 @@ async def authenticated_chat_query(
         logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
-        response_data = await generate_answer(request.message, context_chunks)
+        response_data = await generate_answer(chat_request.message, context_chunks)
         
         # Prepare assistant response
         assistant_message = ChatMessage(
@@ -438,36 +524,52 @@ async def generate_streaming_response(message: str, context_chunks: List[str]) -
         # Get the complete formatted response from Ollama first
         full_response = await generate_single_prompt_response(message, context_chunks)
         
-        # Now stream the complete response in chunks that preserve formatting
-        # Split by lines to maintain structure
-        lines = full_response.split('\n')
+        # Preserve formatting by ensuring proper line breaks
+        # Replace single newlines between sections with double newlines for better rendering
+        sections = full_response.split('\n\n')
         
-        for line in lines:
-            if not line:  # Empty line - preserve it
-                yield '\n'
-                await asyncio.sleep(0.02)
-                continue
+        for section_idx, section in enumerate(sections):
+            if section_idx > 0:
+                # Add double newline between sections
+                yield '\n\n'
+                await asyncio.sleep(0.05)
             
-            # For lines with content, stream them word by word but keep line breaks intact
-            words = line.split()
-            word_count = 0
+            # Process each line within the section
+            lines = section.split('\n')
             
-            for word in words:
-                yield word + ' '
-                word_count += 1
+            for line_idx, line in enumerate(lines):
+                if line_idx > 0:
+                    # Single newline within sections
+                    yield '\n'
+                    await asyncio.sleep(0.02)
                 
-                # Small delay between words for readability
-                # Slightly faster for non-header lines
-                if ':' in line and word_count == 1:
-                    await asyncio.sleep(0.05)  # Slower for headers
+                if not line.strip():  # Empty line
+                    continue
+                
+                # Check if this is a header line (ends with colon)
+                is_header = line.rstrip().endswith(':')
+                
+                # For bullet points, stream the bullet first then the content
+                if line.strip().startswith('•'):
+                    yield '• '
+                    await asyncio.sleep(0.03)
+                    # Stream the rest of the line
+                    rest_of_line = line.strip()[1:].strip()
+                    words = rest_of_line.split()
                 else:
-                    await asyncio.sleep(0.015)  # Faster for regular content
-            
-            # Add line break after each line
-            yield '\n'
-            
-            # Small pause between lines for better readability
-            await asyncio.sleep(0.03)
+                    words = line.split()
+                
+                # Stream words with appropriate delays
+                for word_idx, word in enumerate(words):
+                    yield word
+                    if word_idx < len(words) - 1:
+                        yield ' '
+                    
+                    # Delays for readability
+                    if is_header and word_idx == 0:
+                        await asyncio.sleep(0.04)  # Slower for headers
+                    else:
+                        await asyncio.sleep(0.012)  # Faster for regular content
                     
     except Exception as e:
         logger.error(f"Error generating streaming response: {e}")
@@ -488,7 +590,7 @@ async def stream_chat_query(
     """
     try:
         # Get or create session
-        session_id = request.session_id or str(uuid.uuid4())
+        session_id = chat_request.session_id or str(uuid.uuid4())
         
         chat_session = await get_cached_session(session_id, tenant_id, db)
         if not chat_session:
@@ -506,14 +608,14 @@ async def stream_chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=request.message
+            content=chat_request.message
         )
         db.add(user_message)
         db.commit()
         
         # Return streaming response
         return StreamingResponse(
-            stream_chat_response(request.message, tenant_id, session_id, db),
+            stream_chat_response(chat_request.message, tenant_id, session_id, db),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -541,7 +643,7 @@ async def authenticated_stream_chat_query(
     """
     try:
         # Get or create session
-        session_id = request.session_id or str(uuid.uuid4())
+        session_id = chat_request.session_id or str(uuid.uuid4())
         
         chat_session = await get_cached_session(session_id, tenant_id, db)
         if not chat_session:
@@ -559,14 +661,14 @@ async def authenticated_stream_chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=request.message
+            content=chat_request.message
         )
         db.add(user_message)
         db.commit()
         
         # Return streaming response
         return StreamingResponse(
-            stream_chat_response(request.message, tenant_id, session_id, db),
+            stream_chat_response(chat_request.message, tenant_id, session_id, db),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

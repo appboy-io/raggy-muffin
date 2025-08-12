@@ -214,6 +214,69 @@ const Chat = () => {
     return items;
   };
 
+  const formatMessageContent = (content) => {
+    // Function to parse markdown-style bold text
+    const parseTextWithBold = (text) => {
+      // Replace **text** with bold spans
+      const parts = text.split(/\*\*([^*]+)\*\*/g);
+      return parts.map((part, index) => {
+        // Odd indices are the bold text (captured groups)
+        if (index % 2 === 1) {
+          return <strong key={index}>{part}</strong>;
+        }
+        return part;
+      });
+    };
+    
+    // Split content into paragraphs by double newlines
+    const paragraphs = content.split('\n\n');
+    
+    return paragraphs.map((paragraph, pIndex) => {
+      // Check if this is a header (ends with colon)
+      const lines = paragraph.split('\n');
+      
+      return (
+        <div key={pIndex} className={pIndex > 0 ? 'mt-3' : ''}>
+          {lines.map((line, lIndex) => {
+            const trimmedLine = line.trim();
+            
+            // Empty line
+            if (!trimmedLine) return null;
+            
+            // Header line (ends with colon or has markdown bold)
+            if ((trimmedLine.endsWith(':') && !trimmedLine.startsWith('•')) || 
+                (trimmedLine.includes('**') && trimmedLine.endsWith(':'))) {
+              // Remove markdown formatting and make it a header
+              const headerText = trimmedLine.replace(/\*\*/g, '');
+              return (
+                <div key={lIndex} className="font-semibold mb-1">
+                  {headerText}
+                </div>
+              );
+            }
+            
+            // Bullet point
+            if (trimmedLine.startsWith('•')) {
+              return (
+                <div key={lIndex} className="flex ml-2 mb-1">
+                  <span className="mr-2">•</span>
+                  <span className="flex-1">{parseTextWithBold(trimmedLine.substring(1).trim())}</span>
+                </div>
+              );
+            }
+            
+            // Regular text
+            return (
+              <div key={lIndex} className={lIndex > 0 ? 'mt-1' : ''}>
+                {parseTextWithBold(trimmedLine)}
+              </div>
+            );
+          })}
+        </div>
+      );
+    });
+  };
+
   const MessageBubble = ({ message }) => {
     const isUser = message.type === 'user';
     const isError = message.type === 'error';
@@ -244,14 +307,20 @@ const Chat = () => {
           }`}>
             {/* Message text */}
             <div className="chat-message">
-              {message.content.split('\n').map((line, index) => (
-                <p key={index} className="mb-1 last:mb-0">
-                  {line}
-                </p>
-              ))}
-              {/* Streaming cursor */}
-              {message.isStreaming && (
-                <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1"></span>
+              {isUser || isError ? (
+                // For user and error messages, keep simple text rendering
+                <div className="whitespace-pre-wrap">
+                  {message.content}
+                </div>
+              ) : (
+                // For assistant messages, use formatted rendering
+                <>
+                  {formatMessageContent(message.content)}
+                  {/* Streaming cursor */}
+                  {message.isStreaming && (
+                    <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1"></span>
+                  )}
+                </>
               )}
             </div>
             

@@ -313,79 +313,102 @@ export default function Profile() {
         </div>
 
         {/* Widget Domain Restrictions */}
-        {(isEditing || isOnboarding) && (
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900">Widget Security</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Control which domains can embed your chat widget
-              </p>
-            </div>
-            
-            <div className="px-6 py-4 space-y-4">
-              {/* Current Domains */}
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center justify-between">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Allowed Domains
-                </label>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {formData.allowed_domains.map((domain, index) => (
-                    <span
-                      key={index}
-                      className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
-                    >
-                      {domain === '*' ? 'All domains (*)' : domain}
-                      {domain !== '*' && (
-                        <button
-                          type="button"
-                          onClick={() => removeDomain(domain)}
-                          className="ml-2 text-blue-600 hover:text-blue-800"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                </div>
+                <h3 className="text-lg font-medium text-gray-900">Widget Security</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Control which domains can embed your chat widget
+                </p>
               </div>
-
-              {/* Add Domain */}
-              {!formData.allowed_domains.includes('*') && (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newDomain}
-                    onChange={(e) => setNewDomain(e.target.value)}
-                    placeholder="example.com"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={addDomain}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                  >
-                    Add
-                  </button>
-                </div>
-              )}
-
-              {/* Allow All Domains Option */}
-              {!formData.allowed_domains.includes('*') && formData.allowed_domains.length > 0 && (
+              {!isEditing && !isOnboarding && (
                 <button
                   type="button"
-                  onClick={resetToAllowAll}
-                  className="text-sm text-gray-600 hover:text-gray-800 underline"
+                  onClick={() => setIsEditing(true)}
+                  className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm"
                 >
-                  Allow all domains instead
+                  Edit Domains
                 </button>
               )}
-
-              <p className="text-xs text-gray-500">
-                Leave as "All domains (*)" for testing, or specify exact domains like "yoursite.com" for production
-              </p>
             </div>
           </div>
-        )}
+          
+          <div className="px-6 py-4 space-y-4">
+            {/* Current Domains - Always visible */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-2 block">
+                Currently Allowed Domains
+              </label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {formData.allowed_domains.map((domain, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
+                  >
+                    {domain === '*' ? 'All domains (*)' : domain}
+                  </span>
+                ))}
+              </div>
+            </div>
+            
+            {/* Editing interface - only when editing */}
+            {(isEditing || isOnboarding) && (
+              <div>
+                {/* Remove existing domains option */}
+                {formData.allowed_domains.includes('*') && (
+                  <div className="mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, allowed_domains: [] }))}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-sm"
+                    >
+                      Switch to Specific Domains
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Click above to restrict widget to specific domains
+                    </p>
+                  </div>
+                )}
+
+                {/* Add Domain */}
+                {!formData.allowed_domains.includes('*') && (
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={newDomain}
+                      onChange={(e) => setNewDomain(e.target.value)}
+                      placeholder="cleona.ragamuffin.app"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={addDomain}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
+
+                {/* Allow All Domains Option */}
+                {!formData.allowed_domains.includes('*') && formData.allowed_domains.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={resetToAllowAll}
+                    className="text-sm text-gray-600 hover:text-gray-800 underline"
+                  >
+                    Allow all domains instead
+                  </button>
+                )}
+
+                <p className="text-xs text-gray-500">
+                  Add "cleona.ragamuffin.app" to allow your test site to use the widget
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Form Actions */}
         {(isEditing || isOnboarding) && (

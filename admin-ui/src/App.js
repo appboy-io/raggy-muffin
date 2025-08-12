@@ -11,6 +11,7 @@ import Documents from './pages/Documents';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
 import Widgets from './pages/Widgets';
+import TestSite from './pages/TestSite';
 import Profile from './pages/Profile';
 
 // Create a client
@@ -72,6 +73,11 @@ function AppRoutes() {
           <Layout>
             <Widgets />
           </Layout>
+        </ProtectedRoute>
+      } />
+      <Route path="/test-site" element={
+        <ProtectedRoute>
+          <TestSite />
         </ProtectedRoute>
       } />
       <Route path="/profile" element={

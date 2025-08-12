@@ -16,49 +16,84 @@ import {
 // Component to format assistant messages with proper styling
 function FormattedAssistantMessage({ content, isStreaming = false }) {
   const formatContent = (text) => {
-    const lines = text.split('\n');
-    const formatted = [];
-    let currentSection = null;
+    // Handle case where newlines might be missing or text is on one line
+    // First, try to detect if this is improperly formatted single-line text
+    if (!text.includes('\n') && text.includes('**') && text.includes('•')) {
+      // Try to reconstruct formatting from markdown patterns
+      text = text
+        .replace(/\*\*([^*]+)\*\*/g, '\n\n$1\n') // Add newlines around headers
+        .replace(/•/g, '\n•') // Add newlines before bullets
+        .trim();
+    }
     
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
+    // Split by double newlines to separate sections
+    const sections = text.split('\n\n');
+    const formatted = [];
+    
+    sections.forEach((section, sectionIndex) => {
+      const lines = section.split('\n');
+      const sectionElements = [];
       
-      if (line.startsWith('**') && line.endsWith('**')) {
-        // Header section
-        const headerText = line.replace(/\*\*/g, '');
-        currentSection = headerText.toLowerCase();
-        formatted.push(
-          <div key={i} className="font-semibold text-gray-900 mt-4 mb-2 first:mt-0">
-            {headerText}
-          </div>
-        );
-      } else if (line.startsWith('•')) {
-        // Bullet point
-        const bulletText = line.substring(1).trim();
-        if (currentSection === 'contact information:') {
-          formatted.push(
-            <div key={i} className="flex items-center gap-2 py-1">
-              {getContactIcon(bulletText)}
-              <span className="text-gray-700">{formatContactInfo(bulletText)}</span>
+      lines.forEach((line, lineIndex) => {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) return;
+        
+        // Check for headers (with ** or ending with :)
+        if ((trimmedLine.startsWith('**') && trimmedLine.endsWith(':**')) || 
+            (trimmedLine.startsWith('**') && trimmedLine.endsWith('**'))) {
+          // Header section
+          const headerText = trimmedLine.replace(/\*\*/g, '');
+          sectionElements.push(
+            <div key={`${sectionIndex}-${lineIndex}`} className="font-semibold text-gray-900 mt-3 mb-2 first:mt-0">
+              {headerText}
             </div>
           );
+        } else if (trimmedLine.endsWith(':') && !trimmedLine.startsWith('•')) {
+          // Plain header without markdown
+          sectionElements.push(
+            <div key={`${sectionIndex}-${lineIndex}`} className="font-semibold text-gray-900 mt-3 mb-2 first:mt-0">
+              {trimmedLine}
+            </div>
+          );
+        } else if (trimmedLine.startsWith('•')) {
+          // Bullet point
+          const bulletText = trimmedLine.substring(1).trim();
+          
+          // Check if it's contact info based on content
+          if (bulletText.match(/^(Call|Email|Visit|Location):/i)) {
+            sectionElements.push(
+              <div key={`${sectionIndex}-${lineIndex}`} className="flex items-center gap-2 py-1 ml-2">
+                {getContactIcon(bulletText)}
+                <span className="text-gray-700">{formatContactInfo(bulletText)}</span>
+              </div>
+            );
+          } else {
+            sectionElements.push(
+              <div key={`${sectionIndex}-${lineIndex}`} className="flex items-start gap-2 py-1 ml-2">
+                <span className="text-indigo-500 font-bold">•</span>
+                <span className="text-gray-700 flex-1">{bulletText}</span>
+              </div>
+            );
+          }
         } else {
-          formatted.push(
-            <div key={i} className="flex items-start gap-2 py-1">
-              <span className="text-indigo-500 font-bold">•</span>
-              <span className="text-gray-700">{bulletText}</span>
+          // Regular content
+          sectionElements.push(
+            <div key={`${sectionIndex}-${lineIndex}`} className="text-gray-700 leading-relaxed">
+              {trimmedLine}
             </div>
           );
         }
-      } else if (line && !line.startsWith('**')) {
-        // Regular content
+      });
+      
+      // Add section with spacing
+      if (sectionElements.length > 0) {
         formatted.push(
-          <div key={i} className="text-gray-700 leading-relaxed mb-2">
-            {line}
+          <div key={sectionIndex} className={sectionIndex > 0 ? 'mt-3' : ''}>
+            {sectionElements}
           </div>
         );
       }
-    }
+    });
     
     return formatted;
   };
@@ -78,22 +113,36 @@ function FormattedAssistantMessage({ content, isStreaming = false }) {
 
   const formatContactInfo = (text) => {
     // Make contact information clickable
-    if (text.toLowerCase().includes('email:')) {
-      const email = text.replace(/email:\s*/i, '');
+    if (text.toLowerCase().startsWith('email:')) {
+      const email = text.replace(/^email:\s*/i, '').trim();
       return (
         <span>
           Email: <a href={`mailto:${email}`} className="text-blue-600 hover:underline">{email}</a>
         </span>
       );
-    } else if (text.toLowerCase().includes('phone:')) {
-      const phone = text.replace(/phone:\s*/i, '');
+    } else if (text.toLowerCase().startsWith('call:')) {
+      const phone = text.replace(/^call:\s*/i, '').trim();
+      return (
+        <span>
+          Call: <a href={`tel:${phone}`} className="text-green-600 hover:underline">{phone}</a>
+        </span>
+      );
+    } else if (text.toLowerCase().startsWith('phone:')) {
+      const phone = text.replace(/^phone:\s*/i, '').trim();
       return (
         <span>
           Phone: <a href={`tel:${phone}`} className="text-green-600 hover:underline">{phone}</a>
         </span>
       );
-    } else if (text.toLowerCase().includes('website:')) {
-      const website = text.replace(/website:\s*/i, '');
+    } else if (text.toLowerCase().startsWith('visit:')) {
+      const website = text.replace(/^visit:\s*/i, '').trim();
+      return (
+        <span>
+          Visit: <a href={website} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">{website}</a>
+        </span>
+      );
+    } else if (text.toLowerCase().startsWith('website:')) {
+      const website = text.replace(/^website:\s*/i, '').trim();
       return (
         <span>
           Website: <a href={website} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">{website}</a>
