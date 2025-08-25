@@ -6,7 +6,7 @@ from app.auth.dependencies import get_current_tenant_id, get_optional_user
 from app.models import ChatSession, ChatMessage, CustomerProfile
 from app.core.rag import retrieve_relevant_chunks, generate_answer
 from app.utils.rate_limit import rate_limit_chat_endpoints
-# from app.cache import cached, cache
+from app.cache import cache
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, AsyncGenerator
 from datetime import datetime
@@ -184,13 +184,13 @@ async def chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=chat_request.message
+            content=request.message
         )
         
         # Retrieve relevant context
-        logger.error(f"Chat query: '{chat_request.message}' for tenant: {tenant_id}")
+        logger.error(f"Chat query: '{request.message}' for tenant: {tenant_id}")
         context_chunks = await retrieve_relevant_chunks(
-            query=chat_request.message,
+            query=request.message,
             tenant_id=tenant_id,
             db=db,
             top_k=4
@@ -198,7 +198,7 @@ async def chat_query(
         logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
-        response_data = await generate_answer(chat_request.message, context_chunks)
+        response_data = await generate_answer(request.message, context_chunks)
         
         # Prepare assistant response
         assistant_message = ChatMessage(
@@ -259,7 +259,7 @@ async def authenticated_chat_query(
     """
     try:
         # Get or create session
-        session_id = chat_request.session_id or str(uuid.uuid4())
+        session_id = request.session_id or str(uuid.uuid4())
         
         chat_session = await get_cached_session(session_id, tenant_id, db)
         
@@ -277,13 +277,13 @@ async def authenticated_chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=chat_request.message
+            content=request.message
         )
         
         # Retrieve relevant context
-        logger.error(f"Chat query: '{chat_request.message}' for tenant: {tenant_id}")
+        logger.error(f"Chat query: '{request.message}' for tenant: {tenant_id}")
         context_chunks = await retrieve_relevant_chunks(
-            query=chat_request.message,
+            query=request.message,
             tenant_id=tenant_id,
             db=db,
             top_k=4
@@ -291,7 +291,7 @@ async def authenticated_chat_query(
         logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
-        response_data = await generate_answer(chat_request.message, context_chunks)
+        response_data = await generate_answer(request.message, context_chunks)
         
         # Prepare assistant response
         assistant_message = ChatMessage(
@@ -590,7 +590,7 @@ async def stream_chat_query(
     """
     try:
         # Get or create session
-        session_id = chat_request.session_id or str(uuid.uuid4())
+        session_id = request.session_id or str(uuid.uuid4())
         
         chat_session = await get_cached_session(session_id, tenant_id, db)
         if not chat_session:
@@ -608,14 +608,14 @@ async def stream_chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=chat_request.message
+            content=request.message
         )
         db.add(user_message)
         db.commit()
         
         # Return streaming response
         return StreamingResponse(
-            stream_chat_response(chat_request.message, tenant_id, session_id, db),
+            stream_chat_response(request.message, tenant_id, session_id, db),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -643,7 +643,7 @@ async def authenticated_stream_chat_query(
     """
     try:
         # Get or create session
-        session_id = chat_request.session_id or str(uuid.uuid4())
+        session_id = request.session_id or str(uuid.uuid4())
         
         chat_session = await get_cached_session(session_id, tenant_id, db)
         if not chat_session:
@@ -661,14 +661,14 @@ async def authenticated_stream_chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=chat_request.message
+            content=request.message
         )
         db.add(user_message)
         db.commit()
         
         # Return streaming response
         return StreamingResponse(
-            stream_chat_response(chat_request.message, tenant_id, session_id, db),
+            stream_chat_response(request.message, tenant_id, session_id, db),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

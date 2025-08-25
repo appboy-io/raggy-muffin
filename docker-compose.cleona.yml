@@ -25,11 +25,12 @@ services:
     image: redis:7-alpine
     container_name: cleona_redis
     restart: always
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - cleona_redis_data:/data
-    command: redis-server --appendonly yes
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
     deploy:
       resources:
         limits:
@@ -58,10 +59,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 6G
           cpus: '2.0'
         reservations:
-          memory: 2G
+          memory: 4G
           cpus: '1.0'
 
   api:
@@ -97,7 +98,7 @@ services:
       DATABASE_URL: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
       
       # Redis Configuration
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:cleona_redis_secure_pass_2024@redis:6379
       
       # AWS Cognito loaded from .env.cleona
       
