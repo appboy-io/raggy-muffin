@@ -1,11 +1,18 @@
-from sentence_transformers import SentenceTransformer
+import ollama
 import streamlit as st
 import uuid
+import os
+import numpy as np
 
 @st.cache_resource
-def get_embedder():
-    """Lazy loading of embedding model with caching"""
-    return SentenceTransformer("BAAI/bge-base-en-v1.5")
+def get_ollama_client():
+    """Get Ollama client with configuration"""
+    host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+    return host
+
+def get_embedding_model():
+    """Get the embedding model name from environment"""
+    return os.getenv('OLLAMA_EMBEDDING_MODEL', 'nomic-embed-text')
 
 def chunk_text(text, chunk_size=300, overlap_words=50):
     """
@@ -63,8 +70,24 @@ def chunk_text(text, chunk_size=300, overlap_words=50):
 @st.cache_data(ttl=3600)
 def cached_embed_text(text_list):
     """Cache embeddings for repeated text processing"""
-    embedder = get_embedder()
-    return embedder.encode(text_list, normalize_embeddings=True)
+    host = get_ollama_client()
+    model = get_embedding_model()
+    
+    embeddings = []
+    for text in text_list:
+        response = ollama.embeddings(
+            model=model,
+            prompt=text,
+            options={'host': host}
+        )
+        embeddings.append(np.array(response['embedding']))
+    
+    # Normalize embeddings
+    embeddings = np.array(embeddings)
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    normalized_embeddings = embeddings / norms
+    
+    return normalized_embeddings
 
 def embed_chunks(chunks, tenant_id):
     embeddings = cached_embed_text(chunks)

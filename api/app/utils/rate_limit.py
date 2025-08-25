@@ -8,11 +8,14 @@ from slowapi.errors import RateLimitExceeded
 from fastapi import Request, HTTPException
 from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 import redis
+import os
 from app.config import config
 
 # Initialize Redis connection for rate limiting with connection pooling
+# Use the Redis URL from config, defaulting to the authenticated URL if not set
+redis_url = config.REDIS_URL or os.getenv('REDIS_URL', 'redis://:cleona_redis_secure_pass_2024@redis:6379')
 redis_client = redis.Redis.from_url(
-    config.REDIS_URL, 
+    redis_url, 
     decode_responses=True,
     max_connections=50,
     retry_on_timeout=True,
@@ -29,7 +32,7 @@ def get_rate_limit_key(request: Request) -> str:
 # Initialize the limiter
 limiter = Limiter(
     key_func=get_rate_limit_key,
-    storage_uri=config.REDIS_URL,
+    storage_uri=redis_url,
     default_limits=["1000/hour"]  # Global default limit
 )
 
@@ -91,7 +94,7 @@ def create_tenant_limiter(tenant_id: str):
     
     return Limiter(
         key_func=tenant_key_func,
-        storage_uri=config.REDIS_URL,
+        storage_uri=redis_url,
         default_limits=[rate_limit]
     )
 

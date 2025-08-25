@@ -1,27 +1,19 @@
-from embedding import get_embedder
+from embedding import cached_embed_text
 from db import engine
 from sqlalchemy import text
-from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
-import torch
+import ollama
 from categories import category_manager
 import streamlit as st
 import re
+import os
 
-@st.cache_resource
-def get_generator():
-    """Lazy loading of text generation model with caching"""
-    model_name = "google/flan-t5-small"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-    
-    device = "cpu"
-    return pipeline(
-        "text2text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        device=device,
-        max_length=512
-    )
+def get_chat_model():
+    """Get the chat model name from environment"""
+    return os.getenv('OLLAMA_CHAT_MODEL', 'llama3.2:3b-instruct-q4_0')
+
+def get_ollama_host():
+    """Get Ollama host from environment"""
+    return os.getenv('OLLAMA_HOST', 'http://localhost:11434')
 
 def detect_category_in_query(query):
     """Detect potential aid categories in the query"""
@@ -57,8 +49,8 @@ def detect_category_in_query(query):
 @st.cache_data(ttl=1800)
 def cached_embed_query(query):
     """Cache query embeddings for 30 minutes"""
-    embedder = get_embedder()
-    return embedder.encode([query], normalize_embeddings=True)[0].tolist()
+    embeddings = cached_embed_text([query])
+    return embeddings[0].tolist()
 
 def retrieve_relevant_chunks(query, tenant_id, top_k=4):
     """Retrieve provider information chunks with improved context and category awareness"""
@@ -227,7 +219,7 @@ def extract_categories_from_chunks(chunks):
     return list(set(categories))
 
 def generate_answer(question, context_chunks):
-    """Generate structured answers for provider inquiries"""
+    """Generate answer using Ollama with streaming support"""
     
     if not context_chunks:
         return "No provider information found for this query."
@@ -240,12 +232,70 @@ def generate_answer(question, context_chunks):
     # Combine categories
     all_categories = list(set(question_categories + chunk_categories))
     
-    # Build structured response
+    # Prepare context for the model
+    context = "\n---\n".join(context_chunks)
+    
+    # Create prompt
+    prompt = f"""Based on the following context, answer the question clearly and concisely.
+
+Context:
+{context}
+
+Question: {question}
+
+Instructions:
+- Be specific and helpful
+- Include any relevant contact information
+- Mention relevant categories if applicable
+- Keep the answer focused and direct
+
+Answer:"""
+
+    try:
+        # Call Ollama API
+        response = ollama.chat(
+            model=get_chat_model(),
+            messages=[
+                {'role': 'system', 'content': 'You are a helpful assistant that provides information based on the given context. Be concise and accurate.'},
+                {'role': 'user', 'content': prompt}
+            ],
+            options={'host': get_ollama_host()}
+        )
+        
+        generated_answer = response['message']['content']
+        
+        # Add extracted contact info if available and not already in the answer
+        if any(contact_info.values()) and not any(info in generated_answer for infos in contact_info.values() for info in infos):
+            contact_section = "\n\n**Additional Contact Information:**\n"
+            
+            if contact_info["emails"]:
+                contact_section += f"• Email: {', '.join(contact_info['emails'])}\n"
+            
+            if contact_info["phones"]:
+                contact_section += f"• Phone: {', '.join(contact_info['phones'])}\n"
+            
+            if contact_info["websites"]:
+                contact_section += f"• Website: {', '.join(contact_info['websites'])}\n"
+            
+            if contact_info["addresses"]:
+                contact_section += f"• Address: {contact_info['addresses'][0]}\n"
+            
+            generated_answer += contact_section
+        
+        return generated_answer
+        
+    except Exception as e:
+        print(f"Error generating answer with Ollama: {str(e)}")
+        # Fallback to structured response
+        return generate_structured_answer(question, context_chunks, all_categories, contact_info)
+
+def generate_structured_answer(question, context_chunks, categories, contact_info):
+    """Fallback structured answer generation"""
     response_parts = []
     
     # Add relevant categories
-    if all_categories:
-        response_parts.append(f"**Categories:** {', '.join(all_categories)}")
+    if categories:
+        response_parts.append(f"**Categories:** {', '.join(categories)}")
         response_parts.append("")
     
     # Add contact information
@@ -297,3 +347,50 @@ def generate_answer(question, context_chunks):
         response_parts.append(descriptions[0][:200] + "..." if len(descriptions[0]) > 200 else descriptions[0])
     
     return "\n".join(response_parts)
+
+def stream_answer(question, context_chunks):
+    """Generate answer using Ollama with streaming support"""
+    
+    if not context_chunks:
+        yield "No provider information found for this query."
+        return
+    
+    # Prepare context for the model
+    context = "\n---\n".join(context_chunks)
+    
+    # Create prompt
+    prompt = f"""Based on the following context, answer the question clearly and concisely.
+
+Context:
+{context}
+
+Question: {question}
+
+Instructions:
+- Be specific and helpful
+- Include any relevant contact information
+- Mention relevant categories if applicable
+- Keep the answer focused and direct
+
+Answer:"""
+
+    try:
+        # Stream response from Ollama
+        stream = ollama.chat(
+            model=get_chat_model(),
+            messages=[
+                {'role': 'system', 'content': 'You are a helpful assistant that provides information based on the given context. Be concise and accurate.'},
+                {'role': 'user', 'content': prompt}
+            ],
+            stream=True,
+            options={'host': get_ollama_host()}
+        )
+        
+        for chunk in stream:
+            if 'message' in chunk and 'content' in chunk['message']:
+                yield chunk['message']['content']
+                
+    except Exception as e:
+        print(f"Error streaming answer with Ollama: {str(e)}")
+        # Fallback to non-streaming
+        yield generate_answer(question, context_chunks)

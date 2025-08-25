@@ -1,22 +1,22 @@
-from sentence_transformers import SentenceTransformer
+import ollama
 from functools import lru_cache
 from typing import List, Tuple
 import uuid
 import asyncio
 import logging
+import os
+import numpy as np
 # from app.cache import cached
 
 logger = logging.getLogger(__name__)
 
-@lru_cache(maxsize=1)
-def get_embedder():
-    """Lazy loading of embedding model with caching"""
-    try:
-        # Use BAAI/bge-base-en-v1.5 which produces 768-dimensional embeddings (smaller, faster)
-        return SentenceTransformer("BAAI/bge-base-en-v1.5")
-    except Exception as e:
-        logger.error(f"Failed to load embedding model: {e}")
-        raise
+def get_ollama_host():
+    """Get Ollama host from environment"""
+    return os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+
+def get_embedding_model():
+    """Get the embedding model name from environment"""
+    return os.getenv('OLLAMA_EMBEDDING_MODEL', 'nomic-embed-text')
 
 def chunk_text(text: str, chunk_size: int = None, overlap_words: int = 50) -> List[str]:
     """
@@ -88,54 +88,98 @@ def chunk_text(text: str, chunk_size: int = None, overlap_words: int = 50) -> Li
 
 async def embed_chunks_async(chunks: List[str], tenant_id: str) -> List[Tuple[str, str, str, List[float]]]:
     """
-    Asynchronously embed text chunks
+    Asynchronously embed text chunks using Ollama
     """
     try:
-        embedder = get_embedder()
+        host = get_ollama_host()
+        model = get_embedding_model()
         
-        # Run embedding in thread pool to avoid blocking
+        # Run embeddings in thread pool to avoid blocking
         loop = asyncio.get_event_loop()
-        embeddings = await loop.run_in_executor(
-            None, 
-            lambda: embedder.encode(chunks, normalize_embeddings=True)
-        )
+        
+        def embed_batch():
+            embeddings = []
+            for chunk in chunks:
+                response = ollama.embeddings(
+                    model=model,
+                    prompt=chunk,
+                    options={'host': host}
+                )
+                embeddings.append(np.array(response['embedding']))
+            
+            # Normalize embeddings
+            embeddings = np.array(embeddings)
+            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+            normalized_embeddings = embeddings / norms
+            return normalized_embeddings
+        
+        embeddings = await loop.run_in_executor(None, embed_batch)
         
         return [
             (str(uuid.uuid4()), tenant_id, chunk, emb.tolist())
             for chunk, emb in zip(chunks, embeddings)
         ]
     except Exception as e:
-        logger.error(f"Error embedding chunks: {e}")
+        logger.error(f"Error embedding chunks with Ollama: {e}")
         raise
 
 def embed_chunks(chunks: List[str], tenant_id: str) -> List[Tuple[str, str, str, List[float]]]:
     """
-    Synchronous version for backwards compatibility
+    Synchronous version using Ollama
     """
-    embedder = get_embedder()
-    embeddings = embedder.encode(chunks, normalize_embeddings=True)
-    
-    return [
-        (str(uuid.uuid4()), tenant_id, chunk, emb.tolist())
-        for chunk, emb in zip(chunks, embeddings)
-    ]
+    try:
+        host = get_ollama_host()
+        model = get_embedding_model()
+        
+        embeddings = []
+        for chunk in chunks:
+            response = ollama.embeddings(
+                model=model,
+                prompt=chunk,
+                options={'host': host}
+            )
+            embeddings.append(np.array(response['embedding']))
+        
+        # Normalize embeddings
+        embeddings = np.array(embeddings)
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        normalized_embeddings = embeddings / norms
+        
+        return [
+            (str(uuid.uuid4()), tenant_id, chunk, emb.tolist())
+            for chunk, emb in zip(chunks, normalized_embeddings)
+        ]
+    except Exception as e:
+        logger.error(f"Error embedding chunks with Ollama: {e}")
+        raise
 
 # @cached(key_prefix="query_embedding", ttl=3600)  # Cache for 1 hour
 async def embed_query_async(query: str) -> List[float]:
     """
-    Embed a single query asynchronously with caching
+    Embed a single query asynchronously with caching using Ollama
     """
     try:
-        embedder = get_embedder()
+        host = get_ollama_host()
+        model = get_embedding_model()
         
         # Run embedding in thread pool
         loop = asyncio.get_event_loop()
-        embedding = await loop.run_in_executor(
-            None,
-            lambda: embedder.encode([query], normalize_embeddings=True)[0]
-        )
+        
+        def embed_single():
+            response = ollama.embeddings(
+                model=model,
+                prompt=query,
+                options={'host': host}
+            )
+            # Normalize the embedding
+            embedding = np.array(response['embedding'])
+            norm = np.linalg.norm(embedding)
+            normalized_embedding = embedding / norm
+            return normalized_embedding
+        
+        embedding = await loop.run_in_executor(None, embed_single)
         
         return embedding.tolist()
     except Exception as e:
-        logger.error(f"Error embedding query: {e}")
+        logger.error(f"Error embedding query with Ollama: {e}")
         raise

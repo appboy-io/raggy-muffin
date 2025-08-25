@@ -13,12 +13,34 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
+    container_name: rag_ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
   app:
     build: .
     container_name: rag_streamlit
     ports:
       - "8501:8501"
     environment:
+      # Ollama Configuration
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
+      OLLAMA_CHAT_MODEL: llama3.2:3b-instruct-q4_0
+      
       # Database Configuration
       DB_CONN: postgresql://rag_user:rag_pass@db:5432/rag_db
       DATABASE_URL: postgresql://rag_user:rag_pass@db:5432/rag_db
@@ -89,9 +111,13 @@ services:
       STREAMLIT_PAGE_ICON: ${STREAMLIT_PAGE_ICON:-🧠}
       STREAMLIT_LAYOUT: ${STREAMLIT_LAYOUT:-wide}
     depends_on:
-      - db
+      db:
+        condition: service_started
+      ollama:
+        condition: service_healthy
     volumes:
       - ./app:/app
 
 volumes:
   pgdata:
+  ollama:

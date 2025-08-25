@@ -8,8 +8,19 @@ import logging
 import re
 import json
 import hashlib
+import ollama
+import os
+import asyncio
 
 logger = logging.getLogger(__name__)
+
+def get_chat_model():
+    """Get the chat model name from environment"""
+    return os.getenv('OLLAMA_CHAT_MODEL', 'llama3.2:3b-instruct-q4_0')
+
+def get_ollama_host():
+    """Get Ollama host from environment"""
+    return os.getenv('OLLAMA_HOST', 'http://localhost:11434')
 
 # @cached(key_prefix="rag_chunks", ttl=1800)  # Cache for 30 minutes
 async def retrieve_relevant_chunks(
@@ -219,10 +230,9 @@ def extract_categories_from_chunks(chunks: List[str]) -> List[str]:
     # Return unique categories
     return list(set(categories))
 
-def generate_single_prompt_response(question: str, context_chunks: List[str]) -> str:
+async def generate_single_prompt_response(question: str, context_chunks: List[str]) -> str:
     """
-    Generate response using a single prompt approach with mock LLM
-    This simulates what would happen with an actual LLM API call
+    Generate response using Ollama LLM
     """
     # Extract data for context
     chunk_categories = extract_categories_from_chunks(context_chunks)
@@ -231,7 +241,6 @@ def generate_single_prompt_response(question: str, context_chunks: List[str]) ->
     descriptions = []
     
     # Extract providers from unstructured text (handles bullet points with ●)
-    import re
     for chunk in context_chunks:
         # Look for patterns like "● Name, MD" or "● Name, NP"
         provider_matches = re.findall(r'●\s*([^●\n]+?(?:,\s*(?:MD|NP|DO|PA|RN))[^●\n]*)', chunk)
@@ -258,8 +267,7 @@ def generate_single_prompt_response(question: str, context_chunks: List[str]) ->
     logger.error(f"Extracted categories: {chunk_categories}")
     
     # Create the prompt
-    system_prompt = """
-You are Clara, a helpful and empathetic assistant that connects people with local aid services and resources. You have access to a database of service providers and organizations that offer various types of assistance.
+    system_prompt = """You are Clara, a helpful and empathetic assistant that connects people with local aid services and resources. You have access to a database of service providers and organizations that offer various types of assistance.
 
 Your personality:
 - Warm, caring, and encouraging
@@ -268,6 +276,27 @@ Your personality:
 - Always try to be helpful, even for general questions
 - Acknowledge when someone seems urgent or stressed
 - Guide people toward finding the help they need
+
+IMPORTANT FORMATTING RULES:
+1. Use plain text formatting, NOT markdown
+2. For bullet points, use "•" (bullet character), not "*" or "-"
+3. For section headers, use plain text with colons (like "Available Providers (3 found):")
+4. Always include proper line breaks between sections
+5. Structure your response like this example:
+
+I understand this is urgent. Here are the resources I found for your immediate needs.
+
+Available Providers (3 found):
+• Provider Name, MD - specialty (phone number)
+• Another Provider, NP - details (phone number)
+
+How to Get Started:
+• Call: (phone number)
+• Visit: website
+
+Next Steps:
+• Call the phone number above right away
+• Don't hesitate to ask questions
 
 When someone asks about services:
 1. If you have relevant information, provide it in a structured, easy-to-read format
@@ -280,11 +309,9 @@ When someone asks general questions or greets you:
 2. Gently guide them toward asking about services if appropriate
 3. Explain what kind of help you can provide
 
-Always be encouraging and remind people that help is available.
-"""
+Always be encouraging and remind people that help is available."""
     
-    user_prompt = f"""
-User Question: {question}
+    user_prompt = f"""User Question: {question}
 
 Available Information:
 """
@@ -301,22 +328,38 @@ Contact Information:
 - Websites: {', '.join(contact_info.get('websites', [])) if contact_info.get('websites') else 'Not available'}
 - Addresses: {', '.join(contact_info.get('addresses', [])) if contact_info.get('addresses') else 'Not available'}
 
-Please provide a helpful response based on this information.
-"""
+Please provide a helpful response based on this information."""
     else:
         user_prompt += """
 No specific service information was found for this question.
 
-Please respond helpfully. If this is a greeting or general question, respond conversationally and guide them toward asking about services. If they're asking about services but no information was found, explain this warmly and suggest they try rephrasing or ask about other topics.
-"""
+Please respond helpfully. If this is a greeting or general question, respond conversationally and guide them toward asking about services. If they're asking about services but no information was found, explain this warmly and suggest they try rephrasing or ask about other topics."""
     
-    # Mock LLM response - in real implementation, this would be an API call
-    # For now, we'll simulate different response types based on question patterns
-    return simulate_llm_response(question, context_chunks, chunk_categories, contact_info, providers, descriptions)
+    try:
+        # Call Ollama API with async
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: ollama.chat(
+                model=get_chat_model(),
+                messages=[
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': user_prompt}
+                ],
+                options={'host': get_ollama_host(), 'temperature': 0.7}
+            )
+        )
+        
+        return response['message']['content']
+        
+    except Exception as e:
+        logger.error(f"Error generating response with Ollama: {str(e)}")
+        # Fallback to simulate_llm_response
+        return simulate_llm_response(question, context_chunks, chunk_categories, contact_info, providers, descriptions)
 
 def simulate_llm_response(question: str, context_chunks: List[str], categories: List[str], contact_info: Dict, providers: List[str], descriptions: List[str]) -> str:
     """
-    Simulate LLM response for testing - in production this would be replaced with actual LLM API call
+    Fallback response generation when Ollama is not available
     """
     q_lower = question.lower().strip()
     
@@ -473,12 +516,12 @@ I'm here to help connect you with resources, so don't hesitate to ask about othe
     
     return "\n".join(response_parts)
 
-def generate_answer(question: str, context_chunks: List[str]) -> Dict[str, Any]:
+async def generate_answer(question: str, context_chunks: List[str]) -> Dict[str, Any]:
     """
-    Generate structured answers using single prompt approach
+    Generate structured answers using Ollama
     """
-    # Generate response using prompt-based approach
-    answer_text = generate_single_prompt_response(question, context_chunks)
+    # Generate response using Ollama
+    answer_text = await generate_single_prompt_response(question, context_chunks)
     
     # Still extract structured data for API response
     chunk_categories = extract_categories_from_chunks(context_chunks) if context_chunks else []

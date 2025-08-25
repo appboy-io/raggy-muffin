@@ -25,11 +25,12 @@ services:
     image: redis:7-alpine
     container_name: cleona_redis
     restart: always
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - cleona_redis_data:/data
-    command: redis-server --appendonly yes
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
     deploy:
       resources:
         limits:
@@ -39,6 +40,31 @@ services:
           memory: 256M
           cpus: '0.1'
 
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
+    container_name: cleona_ollama
+    restart: always
+    ports:
+      - "11435:11434"
+    volumes:
+      - cleona_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: '2.0'
+        reservations:
+          memory: 4G
+          cpus: '1.0'
+
   api:
     build: ./api
     container_name: cleona_api
@@ -46,8 +72,12 @@ services:
     ports:
       - "8004:8000"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+      ollama:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -59,11 +89,16 @@ services:
     env_file:
       - .env.cleona
     environment:
+      # Ollama Configuration
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
+      OLLAMA_CHAT_MODEL: llama3.2:3b-instruct-q4_0
+      
       # Database Configuration
       DATABASE_URL: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
       
       # Redis Configuration
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:cleona_redis_secure_pass_2024@redis:6379
       
       # AWS Cognito loaded from .env.cleona
       
@@ -152,8 +187,12 @@ services:
     ports:
       - "8503:8501"
     depends_on:
-      - db
-      - api
+      db:
+        condition: service_started
+      api:
+        condition: service_started
+      ollama:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -165,6 +204,11 @@ services:
     env_file:
       - .env.cleona
     environment:
+      # Ollama Configuration
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
+      OLLAMA_CHAT_MODEL: llama3.2:3b-instruct-q4_0
+      
       # Database Configuration
       DB_CONN: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
       DATABASE_URL: postgresql://cleona_user:cleona_secure_pass_2024@db:5432/cleona_db
@@ -263,3 +307,4 @@ services:
 volumes:
   cleona_pgdata:
   cleona_redis_data:
+  cleona_ollama:

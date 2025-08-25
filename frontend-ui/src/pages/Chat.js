@@ -21,7 +21,9 @@ const Chat = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [streamingMessageId, setStreamingMessageId] = useState(null);
   const messagesEndRef = useRef(null);
+  const eventSourceRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -30,6 +32,15 @@ const Chat = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    // Cleanup EventSource on component unmount
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -47,39 +58,115 @@ const Chat = () => {
       timestamp: new Date(),
     };
 
+    const currentMessage = inputMessage;
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
 
-    try {
-      const response = await chatAPI.sendMessage(
-        user.tenant_id,
-        inputMessage,
-        sessionId
-      );
+    // Close any existing EventSource
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
 
+    try {
+      // Create streaming assistant message
+      const assistantMessageId = Date.now() + 1;
       const assistantMessage = {
-        id: Date.now() + 1,
+        id: assistantMessageId,
         type: 'assistant',
-        content: response.data.answer,
-        sources: response.data.sources || [],
-        contact_info: response.data.contact_info || {},
-        categories: response.data.categories || [],
-        providers: response.data.providers || [],
+        content: '',
+        isStreaming: true,
+        sources: [],
+        contact_info: {},
+        categories: [],
+        providers: [],
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      setStreamingMessageId(assistantMessageId);
+
+      // Set up streaming
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const streamUrl = `${apiUrl}/api/v1/chat/${user.tenant_id}/stream`;
       
-      // Set session ID for future messages
-      if (response.data.session_id && !sessionId) {
-        setSessionId(response.data.session_id);
+      // Use fetch with streaming instead of EventSource for better error handling
+      const response = await fetch(streamUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user.access_token && { 'Authorization': `Bearer ${user.access_token}` })
+        },
+        body: JSON.stringify({
+          message: currentMessage,
+          session_id: sessionId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start streaming');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              
+              if (data.type === 'chunk') {
+                // Update streaming message content
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMessageId 
+                    ? { ...msg, content: msg.content + data.content }
+                    : msg
+                ));
+              } else if (data.type === 'complete') {
+                // Update message with final metadata
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMessageId 
+                    ? { 
+                        ...msg, 
+                        isStreaming: false,
+                        sources: data.sources || [],
+                        contact_info: data.contact_info || {},
+                        categories: data.categories || [],
+                        providers: data.providers || []
+                      }
+                    : msg
+                ));
+                
+                // Set session ID for future messages
+                if (data.session_id && !sessionId) {
+                  setSessionId(data.session_id);
+                }
+              } else if (data.type === 'error') {
+                throw new Error(data.message);
+              }
+            } catch (parseError) {
+              console.warn('Failed to parse SSE data:', parseError);
+            }
+          }
+        }
       }
 
     } catch (error) {
-      console.error('Chat error:', error);
+      console.error('Streaming chat error:', error);
+      
+      // Remove the streaming message and add error message
+      setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
+      
       const errorMessage = {
-        id: Date.now() + 1,
+        id: Date.now() + 2,
         type: 'error',
         content: 'Sorry, I encountered an error while processing your message. Please try again.',
         timestamp: new Date(),
@@ -88,6 +175,7 @@ const Chat = () => {
       toast.error('Failed to send message');
     } finally {
       setIsLoading(false);
+      setStreamingMessageId(null);
     }
   };
 
@@ -126,6 +214,69 @@ const Chat = () => {
     return items;
   };
 
+  const formatMessageContent = (content) => {
+    // Function to parse markdown-style bold text
+    const parseTextWithBold = (text) => {
+      // Replace **text** with bold spans
+      const parts = text.split(/\*\*([^*]+)\*\*/g);
+      return parts.map((part, index) => {
+        // Odd indices are the bold text (captured groups)
+        if (index % 2 === 1) {
+          return <strong key={index}>{part}</strong>;
+        }
+        return part;
+      });
+    };
+    
+    // Split content into paragraphs by double newlines
+    const paragraphs = content.split('\n\n');
+    
+    return paragraphs.map((paragraph, pIndex) => {
+      // Check if this is a header (ends with colon)
+      const lines = paragraph.split('\n');
+      
+      return (
+        <div key={pIndex} className={pIndex > 0 ? 'mt-3' : ''}>
+          {lines.map((line, lIndex) => {
+            const trimmedLine = line.trim();
+            
+            // Empty line
+            if (!trimmedLine) return null;
+            
+            // Header line (ends with colon or has markdown bold)
+            if ((trimmedLine.endsWith(':') && !trimmedLine.startsWith('•')) || 
+                (trimmedLine.includes('**') && trimmedLine.endsWith(':'))) {
+              // Remove markdown formatting and make it a header
+              const headerText = trimmedLine.replace(/\*\*/g, '');
+              return (
+                <div key={lIndex} className="font-semibold mb-1">
+                  {headerText}
+                </div>
+              );
+            }
+            
+            // Bullet point
+            if (trimmedLine.startsWith('•')) {
+              return (
+                <div key={lIndex} className="flex ml-2 mb-1">
+                  <span className="mr-2">•</span>
+                  <span className="flex-1">{parseTextWithBold(trimmedLine.substring(1).trim())}</span>
+                </div>
+              );
+            }
+            
+            // Regular text
+            return (
+              <div key={lIndex} className={lIndex > 0 ? 'mt-1' : ''}>
+                {parseTextWithBold(trimmedLine)}
+              </div>
+            );
+          })}
+        </div>
+      );
+    });
+  };
+
   const MessageBubble = ({ message }) => {
     const isUser = message.type === 'user';
     const isError = message.type === 'error';
@@ -156,11 +307,21 @@ const Chat = () => {
           }`}>
             {/* Message text */}
             <div className="chat-message">
-              {message.content.split('\n').map((line, index) => (
-                <p key={index} className="mb-1 last:mb-0">
-                  {line}
-                </p>
-              ))}
+              {isUser || isError ? (
+                // For user and error messages, keep simple text rendering
+                <div className="whitespace-pre-wrap">
+                  {message.content}
+                </div>
+              ) : (
+                // For assistant messages, use formatted rendering
+                <>
+                  {formatMessageContent(message.content)}
+                  {/* Streaming cursor */}
+                  {message.isStreaming && (
+                    <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1"></span>
+                  )}
+                </>
+              )}
             </div>
             
             {/* Additional info for assistant messages */}

@@ -1,12 +1,8 @@
 streamlit
 pdfplumber
-sentence-transformers
+ollama
 psycopg2-binary
 sqlalchemy
-transformers
-torch
-hf_xet
-nest_asyncio
 pandas
 python-dotenv
 spacy
@@ -14,9 +10,7 @@ scikit-learn
 fuzzywuzzy
 python-Levenshtein
 openpyxl
-# Dependencies for Mixtral-8x7B-Instruct
-bitsandbytes>=0.41.0
-accelerate>=0.20.0
+nest_asyncio
 # AWS Cognito dependencies
 boto3
 streamlit-cognito-auth
