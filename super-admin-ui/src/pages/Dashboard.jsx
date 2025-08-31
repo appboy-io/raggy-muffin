@@ -1,11 +1,12 @@
 import React from 'react';
 import { useQuery } from 'react-query';
+import { Link } from 'react-router-dom';
 import {
   UsersIcon,
   DocumentIcon,
   ChatBubbleLeftRightIcon,
   CurrencyDollarIcon,
-  TrendingUpIcon,
+  ArrowTrendingUpIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 
@@ -76,7 +77,7 @@ export default function Dashboard() {
       value: stats?.activeCustomers || 0,
       change: '+8%',
       changeType: 'increase',
-      icon: TrendingUpIcon,
+      icon: ArrowTrendingUpIcon,
       color: 'bg-green-500',
     },
     {
@@ -181,12 +182,12 @@ export default function Dashboard() {
               ))}
             </div>
             <div className="mt-6">
-              <a
-                href="/analytics"
+              <Link
+                to="/analytics"
                 className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
               >
                 View all activity →
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -226,12 +227,12 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="mt-6">
-              <a
-                href="/system"
+              <Link
+                to="/system"
                 className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
               >
                 View system details →
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -244,8 +245,8 @@ export default function Dashboard() {
         </div>
         <div className="px-6 py-4">
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <a
-              href="/customers"
+            <Link
+              to="/customers"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <UsersIcon className="h-6 w-6 text-blue-500 mr-3" />
@@ -253,19 +254,19 @@ export default function Dashboard() {
                 <h4 className="font-medium text-gray-900">Manage Customers</h4>
                 <p className="text-sm text-gray-500">View and manage all customers</p>
               </div>
-            </a>
-            <a
-              href="/analytics"
+            </Link>
+            <Link
+              to="/analytics"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
-              <TrendingUpIcon className="h-6 w-6 text-green-500 mr-3" />
+              <ArrowTrendingUpIcon className="h-6 w-6 text-green-500 mr-3" />
               <div>
                 <h4 className="font-medium text-gray-900">View Analytics</h4>
                 <p className="text-sm text-gray-500">Platform usage and trends</p>
               </div>
-            </a>
-            <a
-              href="/system"
+            </Link>
+            <Link
+              to="/system"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-3" />
@@ -273,9 +274,9 @@ export default function Dashboard() {
                 <h4 className="font-medium text-gray-900">System Health</h4>
                 <p className="text-sm text-gray-500">Monitor system performance</p>
               </div>
-            </a>
-            <a
-              href="/settings"
+            </Link>
+            <Link
+              to="/settings"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <CurrencyDollarIcon className="h-6 w-6 text-purple-500 mr-3" />
@@ -283,7 +284,7 @@ export default function Dashboard() {
                 <h4 className="font-medium text-gray-900">Platform Settings</h4>
                 <p className="text-sm text-gray-500">Configure platform options</p>
               </div>
-            </a>
+            </Link>
           </div>
         </div>
       </div>

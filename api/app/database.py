@@ -1,6 +1,8 @@
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from contextlib import asynccontextmanager
 from app.config import config
 
 # Database setup with connection pooling
@@ -30,3 +32,28 @@ def get_db():
 def init_db():
     """Initialize database tables"""
     Base.metadata.create_all(bind=engine)
+
+# Async database setup for middleware
+async_engine = create_async_engine(
+    config.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+    echo=False,
+    pool_size=20,
+    max_overflow=30,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
+
+AsyncSessionLocal = async_sessionmaker(
+    async_engine, 
+    class_=AsyncSession, 
+    expire_on_commit=False
+)
+
+@asynccontextmanager
+async def get_db_sync():
+    """Async context manager for database session"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()

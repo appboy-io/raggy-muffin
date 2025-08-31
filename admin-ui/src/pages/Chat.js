@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useMutation, useQuery } from 'react-query';
-import { chatAPI } from '../services/api';
+import { chatAPI, customerAPI } from '../services/api';
 import { useConfig } from '../context/ConfigContext';
 import toast from 'react-hot-toast';
 import {
@@ -173,6 +173,10 @@ export default function Chat() {
   const { config } = useConfig();
 
   const { data: sessions } = useQuery('chatSessions', chatAPI.getChatSessions);
+  const { data: dashboard } = useQuery('dashboard', customerAPI.getDashboard);
+  
+  // Debug logging
+  console.log('Dashboard data:', dashboard);
 
   const sendMessageMutation = useMutation(
     ({ message, sessionId }) => chatAPI.sendMessage(message, sessionId),
@@ -461,6 +465,12 @@ export default function Chat() {
                       }`}>
                         {msg.type === 'user' ? (
                           <UserIcon className="w-5 h-5 text-white" />
+                        ) : dashboard?.widget_config?.avatar_url ? (
+                          <img
+                            src={`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}${dashboard.widget_config.avatar_url}`}
+                            alt="Assistant avatar"
+                            className="w-5 h-5 rounded-full object-cover"
+                          />
                         ) : (
                           <span className="text-white text-sm">{config.brand_logo}</span>
                         )}

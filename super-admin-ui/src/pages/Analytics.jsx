@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   ChartBarIcon,
-  TrendingUpIcon,
+  ArrowTrendingUpIcon,
   UsersIcon,
   CurrencyDollarIcon,
 } from '@heroicons/react/24/outline';
@@ -24,7 +24,7 @@ export default function Analytics() {
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-md mx-auto">
           <div className="text-center">
-            <TrendingUpIcon className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+            <ArrowTrendingUpIcon className="h-8 w-8 text-blue-500 mx-auto mb-2" />
             <p className="text-sm text-gray-600">Usage Trends</p>
           </div>
           <div className="text-center">

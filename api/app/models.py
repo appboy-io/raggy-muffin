@@ -1,6 +1,7 @@
-from sqlalchemy import Column, String, Text, DateTime, Integer, Boolean, ARRAY, Float
+from sqlalchemy import Column, String, Text, DateTime, Integer, Boolean, ARRAY, Float, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from app.database import Base
 import uuid
@@ -100,3 +101,86 @@ class WidgetConfig(Base):
     meta_data = Column(JSONB, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+# =====================================================
+# SUPERADMIN MODELS
+# =====================================================
+
+class SuperAdmin(Base):
+    __tablename__ = "superadmins"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username = Column(String, nullable=False, unique=True, index=True)
+    email = Column(String, nullable=False, unique=True, index=True)
+    password_hash = Column(String, nullable=False)
+    full_name = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_primary = Column(Boolean, default=False)  # First superadmin
+    requires_password_change = Column(Boolean, default=False)
+    ip_whitelist = Column(JSONB, default=[])
+    settings = Column(JSONB, default={})
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    failed_login_attempts = Column(Integer, default=0)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    sessions = relationship("SuperAdminSession", back_populates="superadmin", cascade="all, delete-orphan")
+    audit_logs = relationship("SuperAdminAuditLog", back_populates="superadmin")
+    notifications = relationship("SuperAdminNotification", back_populates="superadmin", cascade="all, delete-orphan")
+
+class SuperAdminSession(Base):
+    __tablename__ = "superadmin_sessions"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    superadmin_id = Column(UUID(as_uuid=True), ForeignKey("superadmins.id", ondelete="CASCADE"), nullable=False)
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    superadmin = relationship("SuperAdmin", back_populates="sessions")
+
+class SuperAdminAuditLog(Base):
+    __tablename__ = "superadmin_audit_log"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    superadmin_id = Column(UUID(as_uuid=True), ForeignKey("superadmins.id"), nullable=True)
+    action = Column(String, nullable=False, index=True)  # e.g., 'customer.view', 'system.setup'
+    entity_type = Column(String, nullable=True)  # e.g., 'customer', 'document'
+    entity_id = Column(String, nullable=True)
+    tenant_id = Column(String, nullable=True, index=True)
+    details = Column(JSONB, default={})
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    superadmin = relationship("SuperAdmin", back_populates="audit_logs")
+
+class SystemConfig(Base):
+    __tablename__ = "system_config"
+    
+    key = Column(String, primary_key=True)
+    value = Column(JSONB, nullable=False)
+    description = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class SuperAdminNotification(Base):
+    __tablename__ = "superadmin_notifications"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    superadmin_id = Column(UUID(as_uuid=True), ForeignKey("superadmins.id", ondelete="CASCADE"), nullable=False)
+    type = Column(String, nullable=False)  # 'alert', 'warning', 'info'
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    data = Column(JSONB, default={})
+    read = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    superadmin = relationship("SuperAdmin", back_populates="notifications")

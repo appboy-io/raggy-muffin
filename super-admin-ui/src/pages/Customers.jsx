@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
 import {
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -8,8 +8,10 @@ import {
   NoSymbolIcon,
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
+import { superAdminAPI } from '../services/api';
+import toast from 'react-hot-toast';
 
-// Mock customer data
+// Mock customer data (fallback for development)
 const mockCustomers = [
   {
     id: '1',
@@ -77,21 +79,63 @@ export default function Customers() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [page, setPage] = useState(1);
+  const queryClient = useQueryClient();
 
-  const { data: customers, isLoading } = useQuery('customers', 
-    () => Promise.resolve(mockCustomers),
-    { staleTime: 30000 }
+  // Fetch customers from API
+  const { data: apiResponse, isLoading, error } = useQuery(
+    ['customers', page, searchTerm, filterStatus],
+    () => superAdminAPI.getAllCustomers({
+      page,
+      limit: 20,
+      search: searchTerm || undefined,
+      status: filterStatus === 'all' ? undefined : filterStatus
+    }),
+    { 
+      staleTime: 30000,
+      keepPreviousData: true,
+      onError: (error) => {
+        console.error('Failed to fetch customers:', error);
+        // Fall back to mock data if API fails
+        return { customers: mockCustomers, total: mockCustomers.length };
+      }
+    }
   );
 
-  const filteredCustomers = customers?.filter(customer => {
-    const matchesSearch = customer.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         customer.contactEmail.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || 
-                         (filterStatus === 'active' && customer.isActive) ||
-                         (filterStatus === 'inactive' && !customer.isActive) ||
-                         (filterStatus === 'pending' && !customer.onboardingCompleted);
-    return matchesSearch && matchesFilter;
-  }) || [];
+  // Use API data if available, otherwise use mock data
+  const customers = apiResponse?.customers || mockCustomers;
+  const totalCustomers = apiResponse?.total || mockCustomers.length;
+
+  // Suspend customer mutation
+  const suspendMutation = useMutation(
+    (tenantId) => superAdminAPI.suspendCustomer(tenantId),
+    {
+      onSuccess: () => {
+        toast.success('Customer suspended successfully');
+        queryClient.invalidateQueries('customers');
+      },
+      onError: (error) => {
+        toast.error(error.response?.data?.detail || 'Failed to suspend customer');
+      }
+    }
+  );
+
+  // Activate customer mutation
+  const activateMutation = useMutation(
+    (tenantId) => superAdminAPI.activateCustomer(tenantId),
+    {
+      onSuccess: () => {
+        toast.success('Customer activated successfully');
+        queryClient.invalidateQueries('customers');
+      },
+      onError: (error) => {
+        toast.error(error.response?.data?.detail || 'Failed to activate customer');
+      }
+    }
+  );
+
+  // Client-side filtering is handled by API now, so we just use the results directly
+  const filteredCustomers = customers || [];
 
   const handleViewCustomer = (customer) => {
     setSelectedCustomer(customer);
@@ -106,13 +150,25 @@ export default function Customers() {
   };
 
   const getStatusBadge = (customer) => {
-    if (!customer.onboardingCompleted) {
+    if (!customer.onboarding_completed) {
       return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Pending</span>;
     }
-    if (!customer.isActive) {
+    if (!customer.is_active) {
       return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Suspended</span>;
     }
     return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>;
+  };
+
+  const handleSuspend = async (customer) => {
+    if (window.confirm(`Are you sure you want to suspend ${customer.company_name}?`)) {
+      suspendMutation.mutate(customer.tenant_id);
+    }
+  };
+
+  const handleActivate = async (customer) => {
+    if (window.confirm(`Are you sure you want to activate ${customer.company_name}?`)) {
+      activateMutation.mutate(customer.tenant_id);
+    }
   };
 
   if (isLoading) {
@@ -196,33 +252,33 @@ export default function Customers() {
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div>
                     <div className="text-sm font-medium text-gray-900">
-                      {customer.companyName}
+                      {customer.company_name || customer.companyName}
                     </div>
                     <div className="text-sm text-gray-500">
-                      {customer.industry}
+                      {customer.industry || 'Not specified'}
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div>
-                    <div className="text-sm text-gray-900">{customer.contactName}</div>
-                    <div className="text-sm text-gray-500">{customer.contactEmail}</div>
+                    <div className="text-sm text-gray-900">{customer.contact_name || customer.contactName || 'N/A'}</div>
+                    <div className="text-sm text-gray-500">{customer.contact_email || customer.contactEmail}</div>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
-                    {customer.subscriptionPlan}
+                    {customer.subscription_plan || customer.subscriptionPlan || 'starter'}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {getStatusBadge(customer)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <div>{customer.documentsCount} docs</div>
-                  <div className="text-xs text-gray-500">{customer.queriesThisMonth.toLocaleString()} queries</div>
+                  <div>{customer.documents_count || customer.documentsCount || 0} docs</div>
+                  <div className="text-xs text-gray-500">{(customer.queries_this_month || customer.queriesThisMonth || 0).toLocaleString()} queries</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {formatDate(customer.createdAt)}
+                  {formatDate(customer.created_at || customer.createdAt)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex justify-end space-x-2">
@@ -239,17 +295,21 @@ export default function Customers() {
                     >
                       <PencilIcon className="h-4 w-4" />
                     </button>
-                    {customer.isActive ? (
+                    {(customer.is_active ?? customer.isActive) ? (
                       <button
+                        onClick={() => handleSuspend(customer)}
                         className="text-red-600 hover:text-red-900"
                         title="Suspend"
+                        disabled={suspendMutation.isLoading}
                       >
                         <NoSymbolIcon className="h-4 w-4" />
                       </button>
                     ) : (
                       <button
+                        onClick={() => handleActivate(customer)}
                         className="text-green-600 hover:text-green-900"
-                        title="Reactivate"
+                        title="Activate"
+                        disabled={activateMutation.isLoading}
                       >
                         <CheckCircleIcon className="h-4 w-4" />
                       </button>
@@ -281,43 +341,43 @@ export default function Customers() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Company Name</label>
-                    <p className="text-sm text-gray-900">{selectedCustomer.companyName}</p>
+                    <p className="text-sm text-gray-900">{selectedCustomer.company_name || selectedCustomer.companyName}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Industry</label>
-                    <p className="text-sm text-gray-900">{selectedCustomer.industry}</p>
+                    <p className="text-sm text-gray-900">{selectedCustomer.industry || 'Not specified'}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Contact Name</label>
-                    <p className="text-sm text-gray-900">{selectedCustomer.contactName}</p>
+                    <p className="text-sm text-gray-900">{selectedCustomer.contact_name || selectedCustomer.contactName || 'N/A'}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Contact Email</label>
-                    <p className="text-sm text-gray-900">{selectedCustomer.contactEmail}</p>
+                    <p className="text-sm text-gray-900">{selectedCustomer.contact_email || selectedCustomer.contactEmail}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Subscription Plan</label>
-                    <p className="text-sm text-gray-900 capitalize">{selectedCustomer.subscriptionPlan}</p>
+                    <p className="text-sm text-gray-900 capitalize">{selectedCustomer.subscription_plan || selectedCustomer.subscriptionPlan || 'starter'}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Tenant ID</label>
-                    <p className="text-sm text-gray-900 font-mono">{selectedCustomer.tenantId}</p>
+                    <p className="text-sm text-gray-900 font-mono">{selectedCustomer.tenant_id || selectedCustomer.tenantId}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Documents Uploaded</label>
-                    <p className="text-sm text-gray-900">{selectedCustomer.documentsCount}</p>
+                    <p className="text-sm text-gray-900">{selectedCustomer.documents_count || selectedCustomer.documentsCount || 0}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Queries This Month</label>
-                    <p className="text-sm text-gray-900">{selectedCustomer.queriesThisMonth.toLocaleString()}</p>
+                    <p className="text-sm text-gray-900">{(selectedCustomer.queries_this_month || selectedCustomer.queriesThisMonth || 0).toLocaleString()}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Account Created</label>
-                    <p className="text-sm text-gray-900">{formatDate(selectedCustomer.createdAt)}</p>
+                    <p className="text-sm text-gray-900">{formatDate(selectedCustomer.created_at || selectedCustomer.createdAt)}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Last Activity</label>
-                    <p className="text-sm text-gray-900">{formatDate(selectedCustomer.lastActivity)}</p>
+                    <p className="text-sm text-gray-900">{formatDate(selectedCustomer.last_activity || selectedCustomer.lastActivity || selectedCustomer.created_at || selectedCustomer.createdAt)}</p>
                   </div>
                 </div>
                 

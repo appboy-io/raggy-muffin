@@ -399,12 +399,46 @@ async def get_widget_embed_script(
         bubble.style.cssText = `
             margin-bottom: 12px;
             display: flex;
+            align-items: flex-end;
+            gap: 8px;
             ${{isUser ? 'justify-content: flex-end;' : 'justify-content: flex-start;'}}
         `;
         
+        // Add avatar for assistant messages
+        if (!isUser && CONFIG.avatarUrl) {{
+            const avatar = document.createElement('div');
+            avatar.style.cssText = `
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                background: #e9ecef;
+                flex-shrink: 0;
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            `;
+            
+            const avatarImg = document.createElement('img');
+            avatarImg.src = API_BASE + CONFIG.avatarUrl;
+            avatarImg.style.cssText = `
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            `;
+            avatarImg.onerror = function() {{
+                // Fallback to default avatar if image fails to load
+                avatar.innerHTML = '🤖';
+                avatar.style.fontSize = '16px';
+            }};
+            
+            avatar.appendChild(avatarImg);
+            bubble.appendChild(avatar);
+        }}
+        
         const message = document.createElement('div');
         message.style.cssText = `
-            max-width: 80%;
+            max-width: ${{isUser ? '80%' : '75%'}};
             padding: 12px 16px;
             border-radius: 18px;
             font-size: 14px;

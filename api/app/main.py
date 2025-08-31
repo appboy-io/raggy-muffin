@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from app.config import config
 from app.database import init_db
 from app.auth.routes import router as auth_router
+from app.middleware.setup_check import SetupCheckMiddleware
 # from app.cache import cached
 from app.utils.rate_limit import limiter, custom_rate_limit_exceeded_handler, rate_limit_general_endpoints
 from slowapi.errors import RateLimitExceeded
@@ -18,6 +20,9 @@ app = FastAPI(
 # Add rate limiter to the app
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, custom_rate_limit_exceeded_handler)
+
+# Add setup check middleware FIRST (before other middleware)
+app.add_middleware(SetupCheckMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -36,11 +41,20 @@ from app.routers.documents import router as documents_router
 from app.routers.chat import router as chat_router
 from app.routers.widgets import router as widgets_router
 from app.routers.customer import router as customer_router
+from app.routers.superadmin import router as superadmin_router
 
 app.include_router(documents_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(widgets_router, prefix="/api/v1")
 app.include_router(customer_router, prefix="/api/v1")
+
+# Superadmin router (no version prefix as it's separate from tenant API)
+app.include_router(superadmin_router)
+
+# Mount static files for avatars
+import os
+os.makedirs("/app/static/avatars", exist_ok=True)
+app.mount("/static", StaticFiles(directory="/app/static"), name="static")
 
 @app.on_event("startup")
 async def startup_event():
