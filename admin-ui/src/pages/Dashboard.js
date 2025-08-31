@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from 'react-query';
 import { useConfig } from '../context/ConfigContext';
 import { useAuth } from '../context/AuthContext';
@@ -191,12 +192,12 @@ export default function Dashboard() {
               </p>
             )}
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <a
-                href="/admin/documents/"
+              <Link
+                to="/documents"
                 className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
               >
                 View all documents →
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -234,12 +235,12 @@ export default function Dashboard() {
               </p>
             )}
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <a
-                href="/admin/chat"
+              <Link
+                to="/chat"
                 className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
               >
                 View all sessions →
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -252,8 +253,8 @@ export default function Dashboard() {
         </div>
         <div className="px-6 py-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <a
-              href="/admin/documents/"
+            <Link
+              to="/documents"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <DocumentIcon className="h-8 w-8 text-blue-500 mr-3" />
@@ -261,9 +262,9 @@ export default function Dashboard() {
                 <h4 className="font-medium text-gray-900">Upload Document</h4>
                 <p className="text-sm text-gray-500">Add new content to your knowledge base</p>
               </div>
-            </a>
-            <a
-              href="/admin/chat"
+            </Link>
+            <Link
+              to="/chat"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <ChatBubbleLeftRightIcon className="h-8 w-8 text-green-500 mr-3" />
@@ -271,9 +272,9 @@ export default function Dashboard() {
                 <h4 className="font-medium text-gray-900">Test Chat</h4>
                 <p className="text-sm text-gray-500">Try out your AI assistant</p>
               </div>
-            </a>
-            <a
-              href="/admin/widgets/"
+            </Link>
+            <Link
+              to="/widgets"
               className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <PuzzlePieceIcon className="h-8 w-8 text-purple-500 mr-3" />
@@ -281,7 +282,7 @@ export default function Dashboard() {
                 <h4 className="font-medium text-gray-900">Configure Widget</h4>
                 <p className="text-sm text-gray-500">Customize your embeddable chat</p>
               </div>
-            </a>
+            </Link>
           </div>
           
           {/* Widget Integration Info */}

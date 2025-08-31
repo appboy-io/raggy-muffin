@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   HomeIcon,
   UsersIcon,
@@ -108,9 +108,9 @@ function SidebarContent({ location, handleLogout }) {
           {navigation.map((item) => {
             const isCurrent = location.pathname === item.href;
             return (
-              <a
+              <Link
                 key={item.name}
-                href={item.href}
+                to={item.href}
                 className={classNames(
                   isCurrent
                     ? 'bg-indigo-100 text-indigo-900 border-r-2 border-indigo-500'
@@ -125,7 +125,7 @@ function SidebarContent({ location, handleLogout }) {
                   )}
                 />
                 {item.name}
-              </a>
+              </Link>
             );
           })}
         </nav>

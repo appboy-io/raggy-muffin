@@ -104,7 +104,7 @@ export function AuthProvider({ children }) {
         
         setUser(userData);
         
-        return { success: true, redirect: '/admin/' };
+        return { success: true, redirect: '/' };
       } else {
         return { success: false, message: response.message || 'Login failed' };
       }

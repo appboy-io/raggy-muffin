@@ -11,8 +11,18 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Expose port
-EXPOSE 3003
+# Accept build args
+ARG REACT_APP_API_URL
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
 
-# Start development server
-CMD ["npm", "run", "dev"]
+# Build for production
+RUN npm run build
+
+# Install serve to serve static files
+RUN npm install -g serve
+
+# Expose port
+EXPOSE 3000
+
+# Serve built files - simple SPA mode
+CMD ["serve", "-s", "build", "-l", "3000"]

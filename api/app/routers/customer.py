@@ -1,5 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
+import os
+import uuid as uuid_lib
+from PIL import Image
+import io
 from app.database import get_db
 from app.auth.dependencies import get_current_tenant_id
 from app.models import CustomerProfile, Document, ChatMessage, WidgetConfig
@@ -200,7 +204,8 @@ async def get_customer_dashboard(
             "welcome_message": widget_config.welcome_message,
             "placeholder_text": widget_config.placeholder_text,
             "is_enabled": widget_config.is_enabled,
-            "allowed_domains": widget_config.allowed_domains
+            "allowed_domains": widget_config.allowed_domains,
+            "avatar_url": widget_config.avatar_url
         }
         
         return CustomerDashboardResponse(
@@ -226,4 +231,120 @@ async def get_customer_dashboard(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve customer dashboard"
+        )
+
+class AvatarUploadResponse(BaseModel):
+    success: bool
+    avatar_url: str
+    message: str
+
+@router.post("/avatar/upload", response_model=AvatarUploadResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Upload avatar image for chat widget"""
+    try:
+        # Validate file
+        if not file.filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No filename provided"
+            )
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp']
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only JPEG, PNG, and WebP images are allowed"
+            )
+        
+        # Read and validate file size (max 5MB)
+        file_content = await file.read()
+        file_size = len(file_content)
+        max_size = 5 * 1024 * 1024  # 5MB
+        
+        if file_size > max_size:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size must be less than 5MB"
+            )
+        
+        # Process image with PIL
+        try:
+            image = Image.open(io.BytesIO(file_content))
+            
+            # Validate minimum dimensions
+            if image.size[0] < 100 or image.size[1] < 100:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Image must be at least 100x100 pixels"
+                )
+            
+            # Convert to RGB if necessary (for JPEG compatibility)
+            if image.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                if image.mode == 'P':
+                    image = image.convert('RGBA')
+                background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+                image = background
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Resize to 200x200 for widget display
+            image.thumbnail((200, 200), Image.Resampling.LANCZOS)
+            
+            # Create avatars directory if it doesn't exist
+            avatars_dir = "/app/static/avatars"
+            os.makedirs(avatars_dir, exist_ok=True)
+            
+            # Generate filename
+            file_extension = "jpg"  # Always save as JPEG for consistency
+            filename = f"{tenant_id}.{file_extension}"
+            file_path = os.path.join(avatars_dir, filename)
+            
+            # Save optimized image
+            image.save(file_path, "JPEG", quality=85, optimize=True)
+            
+            # Update widget config with avatar URL
+            widget_config = db.query(WidgetConfig).filter(
+                WidgetConfig.tenant_id == tenant_id
+            ).first()
+            
+            if not widget_config:
+                # Create widget config if it doesn't exist
+                widget_config = WidgetConfig(
+                    id=uuid_lib.uuid4(),
+                    tenant_id=tenant_id
+                )
+                db.add(widget_config)
+            
+            # Update avatar URL
+            avatar_url = f"/static/avatars/{filename}"
+            widget_config.avatar_url = avatar_url
+            
+            db.commit()
+            
+            return AvatarUploadResponse(
+                success=True,
+                avatar_url=avatar_url,
+                message="Avatar uploaded successfully"
+            )
+            
+        except Exception as img_error:
+            logger.error(f"Image processing error: {img_error}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid image file or processing failed"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading avatar: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload avatar"
         )

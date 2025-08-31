@@ -3,6 +3,7 @@ pdfplumber
 ollama
 psycopg2-binary
 sqlalchemy
+asyncpg
 pandas
 python-dotenv
 spacy

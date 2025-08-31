@@ -36,7 +36,7 @@ export default function Layout({ children }) {
 
   const handleLogout = () => {
     logout();
-    navigate('login');
+    navigate('/login');
   };
 
   return (

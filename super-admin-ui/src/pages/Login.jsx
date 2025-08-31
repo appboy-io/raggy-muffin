@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
+import { superAdminAPI } from '../services/api';
 
 export default function Login() {
   const [credentials, setCredentials] = useState({
@@ -16,19 +17,21 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // For demo purposes, use hardcoded super admin credentials
-      // In production, this would call the super admin API
-      if (credentials.username === 'super@smartassist.ai' && credentials.password === 'SuperAdmin123!') {
-        // Generate mock token
-        const token = 'super_admin_token_' + Date.now();
-        localStorage.setItem('super_admin_token', token);
-        toast.success('Super Admin login successful!');
-        navigate('/');
-      } else {
-        toast.error('Invalid super admin credentials');
-      }
+      const response = await superAdminAPI.login(credentials);
+      
+      // Store the token and user info
+      localStorage.setItem('super_admin_token', response.access_token);
+      localStorage.setItem('super_admin_user', JSON.stringify(response.user));
+      
+      toast.success('Login successful!');
+      navigate('/');
     } catch (error) {
-      toast.error('Login failed');
+      console.error('Login error:', error);
+      if (error.response?.status === 401) {
+        toast.error('Invalid credentials');
+      } else {
+        toast.error(error.response?.data?.detail || 'Login failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -53,7 +56,7 @@ export default function Login() {
             Super Admin Access
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            SmartAssist Solutions Platform Management
+            Raggy Muffin Platform Management
           </p>
         </div>
 
@@ -111,24 +114,6 @@ export default function Login() {
             </button>
           </div>
 
-          <div className="mt-6">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <ShieldCheckIcon className="h-5 w-5 text-yellow-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-yellow-800">
-                    Demo Credentials
-                  </h3>
-                  <div className="mt-2 text-sm text-yellow-700">
-                    <p><strong>Username:</strong> super@smartassist.ai</p>
-                    <p><strong>Password:</strong> SuperAdmin123!</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
         </form>
       </div>
     </div>

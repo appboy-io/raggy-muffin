@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000',
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8004',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -23,7 +23,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('super_admin_token');
-      window.location.href = '/login';
+      window.location.href = '/superadmin/login';
     }
     return Promise.reject(error);
   }
@@ -31,35 +31,57 @@ api.interceptors.response.use(
 
 // Super Admin API
 export const superAdminAPI = {
+  // Setup
+  checkSetupStatus: async () => {
+    const response = await api.get('/api/superadmin/setup/status');
+    return response.data;
+  },
+
+  initializeSetup: async (setupData) => {
+    const response = await api.post('/api/superadmin/setup/initialize', setupData);
+    return response.data;
+  },
+
   // Authentication
   login: async (credentials) => {
-    const response = await api.post('/api/v1/super-admin/login', credentials);
+    const response = await api.post('/api/superadmin/auth/login', credentials);
+    return response.data;
+  },
+
+  logout: async () => {
+    const response = await api.post('/api/superadmin/auth/logout');
+    return response.data;
+  },
+
+  verifyToken: async () => {
+    const response = await api.get('/api/superadmin/auth/verify');
     return response.data;
   },
 
   // Customer Management
-  getAllCustomers: async () => {
-    const response = await api.get('/api/v1/super-admin/customers');
+  getAllCustomers: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const response = await api.get(`/api/superadmin/customers${queryString ? '?' + queryString : ''}`);
     return response.data;
   },
 
   getCustomer: async (tenantId) => {
-    const response = await api.get(`/api/v1/super-admin/customers/${tenantId}`);
+    const response = await api.get(`/api/superadmin/customers/${tenantId}`);
     return response.data;
   },
 
   updateCustomer: async (tenantId, updates) => {
-    const response = await api.put(`/api/v1/super-admin/customers/${tenantId}`, updates);
+    const response = await api.put(`/api/superadmin/customers/${tenantId}`, updates);
     return response.data;
   },
 
   suspendCustomer: async (tenantId) => {
-    const response = await api.post(`/api/v1/super-admin/customers/${tenantId}/suspend`);
+    const response = await api.post(`/api/superadmin/customers/${tenantId}/suspend`);
     return response.data;
   },
 
-  reactivateCustomer: async (tenantId) => {
-    const response = await api.post(`/api/v1/super-admin/customers/${tenantId}/reactivate`);
+  activateCustomer: async (tenantId) => {
+    const response = await api.post(`/api/superadmin/customers/${tenantId}/activate`);
     return response.data;
   },
 

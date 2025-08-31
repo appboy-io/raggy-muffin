@@ -10,6 +10,9 @@ import {
   BriefcaseIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
+  XMarkIcon,
+  PhotoIcon,
+  CloudArrowUpIcon,
 } from '@heroicons/react/24/outline';
 
 export default function Profile() {
@@ -27,9 +30,12 @@ export default function Profile() {
   const [errors, setErrors] = useState({});
   const [isEditing, setIsEditing] = useState(false);
   const [newDomain, setNewDomain] = useState('');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
 
-  // Fetch current profile
+  // Fetch current profile and dashboard for avatar URL
   const { data: profile, isLoading, error } = useQuery('customerProfile', customerAPI.getProfile);
+  const { data: dashboard } = useQuery('dashboard', customerAPI.getDashboard);
 
   // Update profile mutation
   const updateProfileMutation = useMutation(customerAPI.updateProfile, {
@@ -41,6 +47,20 @@ export default function Profile() {
     },
     onError: (error) => {
       setErrors({ submit: error.response?.data?.detail || 'Failed to update profile' });
+    },
+  });
+
+  // Avatar upload mutation
+  const uploadAvatarMutation = useMutation(customerAPI.uploadAvatar, {
+    onSuccess: (data) => {
+      queryClient.invalidateQueries('customerProfile');
+      queryClient.invalidateQueries('dashboard');
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setErrors({});
+    },
+    onError: (error) => {
+      setErrors({ avatar: error.response?.data?.detail || 'Failed to upload avatar' });
     },
   });
 
@@ -125,6 +145,45 @@ export default function Profile() {
       ...prev,
       allowed_domains: ['*']
     }));
+  };
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setErrors({ avatar: 'Only JPEG, PNG, and WebP images are allowed' });
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors({ avatar: 'File size must be less than 5MB' });
+      return;
+    }
+
+    setAvatarFile(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => setAvatarPreview(e.target.result);
+    reader.readAsDataURL(file);
+    
+    // Clear avatar errors
+    setErrors(prev => ({ ...prev, avatar: null }));
+  };
+
+  const handleAvatarUpload = () => {
+    if (!avatarFile) return;
+    uploadAvatarMutation.mutate(avatarFile);
+  };
+
+  const cancelAvatarUpload = () => {
+    setAvatarFile(null);
+    setAvatarPreview(null);
+    setErrors(prev => ({ ...prev, avatar: null }));
   };
 
   if (isLoading) {
@@ -312,6 +371,119 @@ export default function Profile() {
           </div>
         </div>
 
+        {/* Avatar Upload */}
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-medium text-gray-900">Chat Widget Avatar</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Upload a profile photo that will appear in your chat widget
+            </p>
+          </div>
+          
+          <div className="px-6 py-4">
+            <div className="flex items-start space-x-6">
+              {/* Current/Preview Avatar */}
+              <div className="flex-shrink-0">
+                <div className="h-24 w-24 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                  {avatarPreview ? (
+                    <img
+                      src={avatarPreview}
+                      alt="Avatar preview"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : dashboard?.widget_config?.avatar_url ? (
+                    <img
+                      src={`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}${dashboard.widget_config.avatar_url}`}
+                      alt="Current avatar"
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        const parent = e.target.parentElement;
+                        parent.innerHTML = '';
+                        const icon = document.createElement('div');
+                        icon.innerHTML = '📷';
+                        icon.style.fontSize = '32px';
+                        icon.style.color = '#9CA3AF';
+                        parent.appendChild(icon);
+                      }}
+                    />
+                  ) : (
+                    <PhotoIcon className="h-8 w-8 text-gray-400" />
+                  )}
+                </div>
+              </div>
+
+              {/* Upload Controls */}
+              <div className="flex-1">
+                {!avatarFile ? (
+                  <div>
+                    <label className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                      <CloudArrowUpIcon className="h-5 w-5 mr-2" />
+                      Choose Avatar Image
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={handleAvatarChange}
+                        className="sr-only"
+                      />
+                    </label>
+                    <p className="mt-2 text-xs text-gray-500">
+                      JPEG, PNG, or WebP up to 5MB. Recommended size: 200x200px
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-700">
+                      Ready to upload: <span className="font-medium">{avatarFile.name}</span>
+                    </p>
+                    <div className="flex space-x-3">
+                      <button
+                        type="button"
+                        onClick={handleAvatarUpload}
+                        disabled={uploadAvatarMutation.isLoading}
+                        className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {uploadAvatarMutation.isLoading ? 'Uploading...' : 'Upload Avatar'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelAvatarUpload}
+                        className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Avatar Error */}
+                {errors.avatar && (
+                  <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3">
+                    <div className="flex">
+                      <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+                      <div className="ml-3">
+                        <p className="text-sm text-red-700">{errors.avatar}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Success message */}
+                {uploadAvatarMutation.isSuccess && !errors.avatar && (
+                  <div className="mt-3 bg-green-50 border border-green-200 rounded-md p-3">
+                    <div className="flex">
+                      <CheckCircleIcon className="h-5 w-5 text-green-400" />
+                      <div className="ml-3">
+                        <p className="text-sm text-green-700">Avatar uploaded successfully!</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Widget Domain Restrictions */}
         <div className="bg-white shadow rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
@@ -347,6 +519,16 @@ export default function Profile() {
                     className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
                   >
                     {domain === '*' ? 'All domains (*)' : domain}
+                    {(isEditing || isOnboarding) && domain !== '*' && (
+                      <button
+                        type="button"
+                        onClick={() => removeDomain(domain)}
+                        className="ml-2 inline-flex items-center justify-center h-4 w-4 rounded-full hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        aria-label={`Remove ${domain}`}
+                      >
+                        <XMarkIcon className="h-3 w-3" />
+                      </button>
+                    )}
                   </span>
                 ))}
               </div>

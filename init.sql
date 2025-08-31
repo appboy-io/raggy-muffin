@@ -172,3 +172,103 @@ CREATE INDEX IF NOT EXISTS idx_documents_tenant_created ON documents(tenant_id, 
 
 -- 9. Embeddings with document metadata filtering
 CREATE INDEX IF NOT EXISTS idx_embeddings_tenant_meta ON embeddings(tenant_id) WHERE meta_data ? 'document_id';
+
+-- =====================================================
+-- SUPERADMIN TABLES
+-- =====================================================
+
+-- Superadmins table (separate from tenant users)
+CREATE TABLE IF NOT EXISTS superadmins (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    full_name TEXT,
+    is_active BOOLEAN DEFAULT true,
+    is_primary BOOLEAN DEFAULT false, -- Mark the first/primary superadmin
+    requires_password_change BOOLEAN DEFAULT false,
+    ip_whitelist JSONB DEFAULT '[]',
+    settings JSONB DEFAULT '{}',
+    last_login TIMESTAMP WITH TIME ZONE,
+    failed_login_attempts INTEGER DEFAULT 0,
+    locked_until TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Create indexes for superadmins
+CREATE INDEX IF NOT EXISTS idx_superadmins_username ON superadmins(username);
+CREATE INDEX IF NOT EXISTS idx_superadmins_email ON superadmins(email);
+CREATE INDEX IF NOT EXISTS idx_superadmins_is_active ON superadmins(is_active);
+
+-- Superadmin sessions table for token management
+CREATE TABLE IF NOT EXISTS superadmin_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    superadmin_id UUID NOT NULL REFERENCES superadmins(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    ip_address TEXT,
+    user_agent TEXT,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Create indexes for sessions
+CREATE INDEX IF NOT EXISTS idx_superadmin_sessions_token ON superadmin_sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_superadmin_sessions_expires ON superadmin_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_superadmin_sessions_superadmin ON superadmin_sessions(superadmin_id);
+
+-- Audit log for superadmin actions
+CREATE TABLE IF NOT EXISTS superadmin_audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    superadmin_id UUID REFERENCES superadmins(id),
+    action TEXT NOT NULL, -- e.g., 'customer.view', 'customer.suspend', 'system.configure'
+    entity_type TEXT, -- e.g., 'customer', 'document', 'system'
+    entity_id TEXT, -- ID of the affected entity
+    tenant_id TEXT, -- Affected tenant if applicable
+    details JSONB DEFAULT '{}', -- Additional context about the action
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Create indexes for audit log
+CREATE INDEX IF NOT EXISTS idx_audit_log_superadmin ON superadmin_audit_log(superadmin_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON superadmin_audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON superadmin_audit_log(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON superadmin_audit_log(created_at DESC);
+
+-- System configuration table for global settings
+CREATE TABLE IF NOT EXISTS system_config (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Initialize system configuration
+INSERT INTO system_config (key, value, description) VALUES
+    ('setup_complete', 'false'::jsonb, 'Whether initial superadmin setup is complete'),
+    ('system_locked', 'false'::jsonb, 'Emergency system lock'),
+    ('maintenance_mode', 'false'::jsonb, 'System maintenance mode'),
+    ('allowed_registration_domains', '[]'::jsonb, 'Email domains allowed for self-registration'),
+    ('global_rate_limits', '{"api": 1000, "widget": 100}'::jsonb, 'Global rate limits per hour'),
+    ('system_version', '"1.0.0"'::jsonb, 'Current system version')
+ON CONFLICT (key) DO NOTHING;
+
+-- Superadmin notifications table
+CREATE TABLE IF NOT EXISTS superadmin_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    superadmin_id UUID REFERENCES superadmins(id) ON DELETE CASCADE,
+    type TEXT NOT NULL, -- 'alert', 'warning', 'info'
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    data JSONB DEFAULT '{}',
+    read BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Create indexes for notifications
+CREATE INDEX IF NOT EXISTS idx_notifications_superadmin ON superadmin_notifications(superadmin_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON superadmin_notifications(read);
+CREATE INDEX IF NOT EXISTS idx_notifications_created ON superadmin_notifications(created_at DESC);
