@@ -37,10 +37,21 @@ api.interceptors.response.use(
   }
 );
 
-// Auth API
+// Auth API - Updated to match backend Cognito endpoints
 export const authAPI = {
-  login: (email, password) => api.post('/api/v1/auth/login', { email, password }),
-  register: (userData) => api.post('/api/v1/auth/register', userData),
+  login: (email, password) => api.post('/api/v1/auth/signin', { 
+    username: email, 
+    password 
+  }),
+  register: (userData) => api.post('/api/v1/auth/signup', { 
+    username: userData.email,
+    email: userData.email, 
+    password: userData.password 
+  }),
+  confirmSignup: (email, confirmationCode) => api.post('/api/v1/auth/confirm-signup', {
+    username: email,
+    confirmation_code: confirmationCode
+  }),
   logout: () => api.post('/api/v1/auth/logout'),
   verifyToken: (token) => api.get('/api/v1/auth/verify', {
     headers: { Authorization: `Bearer ${token}` }

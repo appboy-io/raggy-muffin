@@ -29,6 +29,7 @@ class CustomerProfileResponse(BaseModel):
     tenant_id: str
     company_name: str
     company_website: Optional[str]
+    company_logo_url: Optional[str]
     contact_email: str
     contact_name: Optional[str]
     industry: Optional[str]
@@ -124,6 +125,7 @@ async def update_customer_profile(
             tenant_id=profile.tenant_id,
             company_name=profile.company_name,
             company_website=profile.company_website,
+            company_logo_url=profile.company_logo_url,
             contact_email=profile.contact_email,
             contact_name=profile.contact_name,
             industry=profile.industry,

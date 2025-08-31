@@ -15,6 +15,7 @@ export const ConfigProvider = ({ children }) => {
   const [config, setConfig] = useState({
     brand_name: process.env.REACT_APP_BRAND_NAME || 'AI Assistant',
     brand_logo: process.env.REACT_APP_BRAND_LOGO || '🤖',
+    brand_logo_url: process.env.REACT_APP_BRAND_LOGO_URL || '',
     primary_color: process.env.REACT_APP_PRIMARY_COLOR || '#3b82f6',
     secondary_color: process.env.REACT_APP_SECONDARY_COLOR || '#6b7280',
     widget_domain: process.env.REACT_APP_WIDGET_DOMAIN || 'http://localhost:3000',

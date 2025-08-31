@@ -53,7 +53,15 @@ const Login = () => {
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <span className="text-6xl">{config.brand_logo}</span>
+            {config.brand_logo_url ? (
+              <img 
+                src={config.brand_logo_url} 
+                alt={config.brand_name}
+                className="h-16 w-auto"
+              />
+            ) : (
+              <span className="text-6xl">{config.brand_logo}</span>
+            )}
           </div>
           <h2 className="text-3xl font-extrabold text-gray-900">
             Welcome back

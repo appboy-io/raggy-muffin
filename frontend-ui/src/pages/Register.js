@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
+import EmailConfirmation from '../components/EmailConfirmation';
 import toast from 'react-hot-toast';
 import {
   EyeIcon,
@@ -26,6 +27,8 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [registrationEmail, setRegistrationEmail] = useState('');
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -86,8 +89,15 @@ const Register = () => {
       });
       
       if (result.success) {
-        toast.success('Account created successfully!');
-        navigate('/');
+        if (result.requiresConfirmation) {
+          // Show confirmation modal instead of navigating
+          setRegistrationEmail(formData.email);
+          setShowConfirmation(true);
+          toast.success('Registration successful! Please check your email.');
+        } else {
+          toast.success('Account created successfully!');
+          navigate('/');
+        }
       } else {
         toast.error(result.error || 'Registration failed');
       }
@@ -128,13 +138,21 @@ const Register = () => {
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <span className="text-6xl">{config.brand_logo}</span>
+            {config.brand_logo_url ? (
+              <img 
+                src={config.brand_logo_url} 
+                alt={config.brand_name}
+                className="h-16 w-auto"
+              />
+            ) : (
+              <span className="text-6xl">{config.brand_logo}</span>
+            )}
           </div>
           <h2 className="text-3xl font-extrabold text-gray-900">
             Create your account
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Join {config.brand_name} and start chatting with your documents
+            Join {config.brand_name} and start building AI chat agents
           </p>
         </div>
 
@@ -353,6 +371,18 @@ const Register = () => {
           </div>
         </form>
       </div>
+
+      {/* Email Confirmation Modal */}
+      {showConfirmation && (
+        <EmailConfirmation
+          email={registrationEmail}
+          onClose={() => setShowConfirmation(false)}
+          onSuccess={() => {
+            setShowConfirmation(false);
+            navigate('/login');
+          }}
+        />
+      )}
     </div>
   );
 };

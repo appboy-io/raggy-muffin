@@ -4,12 +4,11 @@ import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
 import {
   HomeIcon,
-  DocumentArrowUpIcon,
-  ChatBubbleLeftRightIcon,
   ArrowRightOnRectangleIcon,
   UserIcon,
   Bars3Icon,
   XMarkIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 
 const Layout = ({ children }) => {
@@ -20,8 +19,6 @@ const Layout = ({ children }) => {
 
   const navigation = [
     { name: 'Home', href: '/', icon: HomeIcon },
-    { name: 'Upload', href: '/upload', icon: DocumentArrowUpIcon },
-    { name: 'Chat', href: '/chat', icon: ChatBubbleLeftRightIcon },
   ];
 
   const handleLogout = async () => {
@@ -42,10 +39,20 @@ const Layout = ({ children }) => {
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/" className="flex items-center space-x-2">
-                  <span className="text-2xl">{config.brand_logo}</span>
-                  <span className="text-xl font-bold text-gray-900">
-                    {config.brand_name}
-                  </span>
+                  {config.brand_logo_url ? (
+                    <img 
+                      src={config.brand_logo_url} 
+                      alt={config.brand_name}
+                      className="h-8 w-auto"
+                    />
+                  ) : (
+                    <>
+                      <span className="text-2xl">{config.brand_logo}</span>
+                      <span className="text-xl font-bold text-gray-900">
+                        {config.brand_name}
+                      </span>
+                    </>
+                  )}
                 </Link>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
@@ -68,9 +75,13 @@ const Layout = ({ children }) => {
             <div className="hidden sm:ml-6 sm:flex sm:items-center">
               {isAuthenticated ? (
                 <div className="flex items-center space-x-4">
-                  <span className="text-sm text-gray-700">
-                    Welcome, {user?.email || 'User'}
-                  </span>
+                  <a
+                    href="http://localhost:3004"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    <Cog6ToothIcon className="h-4 w-4 mr-2" />
+                    Admin Dashboard
+                  </a>
                   <button
                     onClick={handleLogout}
                     className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
@@ -91,7 +102,7 @@ const Layout = ({ children }) => {
                     to="/register"
                     className="btn-primary"
                   >
-                    Register
+                    Get Started
                   </Link>
                 </div>
               )}
@@ -136,7 +147,7 @@ const Layout = ({ children }) => {
             <div className="pt-4 pb-3 border-t border-gray-200">
               {isAuthenticated ? (
                 <div className="space-y-1">
-                  <div className="flex items-center px-4">
+                  <div className="flex items-center px-4 mb-3">
                     <div className="flex-shrink-0">
                       <UserIcon className="h-8 w-8 rounded-full text-gray-400" />
                     </div>
@@ -146,6 +157,15 @@ const Layout = ({ children }) => {
                       </div>
                     </div>
                   </div>
+                  <a
+                    href="http://localhost:3004"
+                    className="block px-4 py-2 text-base font-medium text-primary-600 hover:text-primary-800 hover:bg-primary-50"
+                  >
+                    <div className="flex items-center">
+                      <Cog6ToothIcon className="h-4 w-4 mr-2" />
+                      Admin Dashboard
+                    </div>
+                  </a>
                   <button
                     onClick={handleLogout}
                     className="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
@@ -170,7 +190,7 @@ const Layout = ({ children }) => {
                     onClick={() => setMobileMenuOpen(false)}
                     className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
                   >
-                    Register
+                    Get Started
                   </Link>
                 </div>
               )}

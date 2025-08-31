@@ -71,6 +71,7 @@ class CustomerProfile(Base):
     tenant_id = Column(String, nullable=False, unique=True, index=True)
     company_name = Column(String, nullable=False)
     company_website = Column(String, nullable=True)
+    company_logo_url = Column(String, nullable=True)  # URL to uploaded logo
     contact_email = Column(String, nullable=False)
     contact_name = Column(String, nullable=True)
     industry = Column(String, nullable=True)
