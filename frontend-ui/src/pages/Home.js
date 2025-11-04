@@ -109,20 +109,20 @@ const Home = () => {
         <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
           {isAuthenticated ? (
             <div className="space-y-4 sm:space-y-0 sm:space-x-4 sm:flex">
-              <Link
-                to="/upload"
+              <a
+                href="/admin/documents"
                 className="btn-primary w-full sm:w-auto inline-flex items-center justify-center"
               >
                 <SparklesIcon className="h-5 w-5 mr-2" />
                 Build Your Agent
-              </Link>
-              <Link
-                to="/chat"
+              </a>
+              <a
+                href="/admin/chat"
                 className="btn-secondary w-full sm:w-auto inline-flex items-center justify-center"
               >
                 <ChatBubbleLeftRightIcon className="h-5 w-5 mr-2" />
                 Test Your Agent
-              </Link>
+              </a>
             </div>
           ) : (
             <div className="flex justify-center">

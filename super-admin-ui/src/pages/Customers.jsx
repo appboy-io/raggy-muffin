@@ -85,19 +85,30 @@ export default function Customers() {
   // Fetch customers from API
   const { data: apiResponse, isLoading, error } = useQuery(
     ['customers', page, searchTerm, filterStatus],
-    () => superAdminAPI.getAllCustomers({
-      page,
-      limit: 20,
-      search: searchTerm || undefined,
-      status: filterStatus === 'all' ? undefined : filterStatus
-    }),
+    () => {
+      const params = {
+        page,
+        limit: 20
+      };
+      
+      // Only add search if it has a value
+      if (searchTerm && searchTerm.trim()) {
+        params.search = searchTerm.trim();
+      }
+      
+      // Only add status if it's not 'all'
+      if (filterStatus && filterStatus !== 'all') {
+        params.status = filterStatus;
+      }
+      
+      return superAdminAPI.getAllCustomers(params);
+    },
     { 
       staleTime: 30000,
       keepPreviousData: true,
       onError: (error) => {
         console.error('Failed to fetch customers:', error);
-        // Fall back to mock data if API fails
-        return { customers: mockCustomers, total: mockCustomers.length };
+        // Note: onError doesn't return data, fallback logic is handled below
       }
     }
   );

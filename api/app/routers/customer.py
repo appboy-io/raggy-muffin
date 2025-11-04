@@ -29,7 +29,7 @@ class CustomerProfileResponse(BaseModel):
     tenant_id: str
     company_name: str
     company_website: Optional[str]
-    company_logo_url: Optional[str]
+    company_logo_url: Optional[str] = None
     contact_email: str
     contact_name: Optional[str]
     industry: Optional[str]

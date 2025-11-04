@@ -77,13 +77,21 @@ export default function Dashboard() {
           }`}>
             <div className="flex">
               <div className="flex-shrink-0">
-                <div className={`h-5 w-5 ${
-                  dashboard.profile.onboarding_completed ? 'text-blue-400' : 'text-yellow-400'
-                }`}>
-                  {config.brand_logo}
-                </div>
+                {dashboard?.widget_config?.avatar_url ? (
+                  <img 
+                    src={`${process.env.REACT_APP_API_URL}${dashboard.widget_config.avatar_url}`}
+                    alt={`${dashboard.profile.company_name} avatar`}
+                    className="h-10 w-10 rounded-full object-cover border-2 border-white shadow-sm"
+                  />
+                ) : (
+                  <div className={`h-10 w-10 rounded-full flex items-center justify-center text-lg ${
+                    dashboard.profile.onboarding_completed ? 'bg-blue-400 text-white' : 'bg-yellow-400 text-white'
+                  }`}>
+                    {config.brand_logo}
+                  </div>
+                )}
               </div>
-              <div className="ml-3 flex-1">
+              <div className="ml-4 flex-1">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className={`text-sm ${

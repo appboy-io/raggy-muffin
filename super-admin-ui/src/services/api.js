@@ -87,7 +87,12 @@ export const superAdminAPI = {
 
   // Platform Analytics
   getPlatformStats: async () => {
-    const response = await api.get('/api/v1/super-admin/analytics/platform');
+    const response = await api.get('/api/superadmin/analytics/platform-stats');
+    return response.data;
+  },
+
+  getRecentActivity: async (limit = 10) => {
+    const response = await api.get(`/api/superadmin/analytics/recent-activity?limit=${limit}`);
     return response.data;
   },
 
@@ -103,7 +108,7 @@ export const superAdminAPI = {
 
   // System Health
   getSystemHealth: async () => {
-    const response = await api.get('/api/v1/super-admin/system/health');
+    const response = await api.get('/api/superadmin/system/health');
     return response.data;
   },
 

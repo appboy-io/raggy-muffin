@@ -76,7 +76,7 @@ const Layout = ({ children }) => {
               {isAuthenticated ? (
                 <div className="flex items-center space-x-4">
                   <a
-                    href="http://localhost:3004"
+                    href="/admin"
                     className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     <Cog6ToothIcon className="h-4 w-4 mr-2" />
@@ -158,7 +158,7 @@ const Layout = ({ children }) => {
                     </div>
                   </div>
                   <a
-                    href="http://localhost:3004"
+                    href="/admin"
                     className="block px-4 py-2 text-base font-medium text-primary-600 hover:text-primary-800 hover:bg-primary-50"
                   >
                     <div className="flex items-center">

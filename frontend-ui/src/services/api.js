@@ -43,15 +43,23 @@ export const authAPI = {
     username: email, 
     password 
   }),
-  register: (userData) => api.post('/api/v1/auth/signup', { 
-    username: userData.email,
-    email: userData.email, 
-    password: userData.password 
-  }),
-  confirmSignup: (email, confirmationCode) => api.post('/api/v1/auth/confirm-signup', {
-    username: email,
-    confirmation_code: confirmationCode
-  }),
+  register: (userData) => {
+    // Generate username from email (remove @ and domain for Cognito compatibility)
+    const username = userData.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+    return api.post('/api/v1/auth/signup', { 
+      username: username,
+      email: userData.email, 
+      password: userData.password 
+    });
+  },
+  confirmSignup: (email, confirmationCode) => {
+    // Generate username from email (same as registration)
+    const username = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+    return api.post('/api/v1/auth/confirm-signup', {
+      username: username,
+      confirmation_code: confirmationCode
+    });
+  },
   logout: () => api.post('/api/v1/auth/logout'),
   verifyToken: (token) => api.get('/api/v1/auth/verify', {
     headers: { Authorization: `Bearer ${token}` }

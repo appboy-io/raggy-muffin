@@ -103,6 +103,25 @@ class WidgetConfig(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+class AgentConfig(Base):
+    __tablename__ = "agent_configs"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, nullable=False, unique=True, index=True)
+    agent_name = Column(String, default="Assistant")
+    agent_role = Column(String, default="helpful assistant")
+    personality_traits = Column(JSONB, default=[])  # ["friendly", "professional", "empathetic"]
+    greeting_message = Column(Text, default="Hello! How can I help you today?")
+    system_prompt = Column(Text, nullable=True)  # Custom system prompt override
+    custom_instructions = Column(Text, nullable=True)  # Additional guidelines
+    response_style = Column(String, default="conversational")  # conversational, professional, technical
+    industry = Column(String, default="general")
+    example_interactions = Column(JSONB, default=[])  # Few-shot examples
+    formatting_rules = Column(JSONB, default={})  # Response formatting preferences
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
 # =====================================================
 # SUPERADMIN MODELS
 # =====================================================

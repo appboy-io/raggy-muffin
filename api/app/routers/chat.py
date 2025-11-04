@@ -184,13 +184,13 @@ async def chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=request.message
+            content=chat_request.message
         )
         
         # Retrieve relevant context
-        logger.error(f"Chat query: '{request.message}' for tenant: {tenant_id}")
-        context_chunks = await retrieve_relevant_chunks(
-            query=request.message,
+        logger.error(f"Chat query: '{chat_request.message}' for tenant: {tenant_id}")
+        context_chunks, similarity_scores = await retrieve_relevant_chunks(
+            query=chat_request.message,
             tenant_id=tenant_id,
             db=db,
             top_k=4
@@ -198,7 +198,7 @@ async def chat_query(
         logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
-        response_data = await generate_answer(request.message, context_chunks)
+        response_data = await generate_answer(chat_request.message, context_chunks, tenant_id, db, similarity_scores)
         
         # Prepare assistant response
         assistant_message = ChatMessage(
@@ -277,13 +277,13 @@ async def authenticated_chat_query(
             session_id=chat_session.id,
             tenant_id=tenant_id,
             message_type="user",
-            content=request.message
+            content=chat_request.message
         )
         
         # Retrieve relevant context
-        logger.error(f"Chat query: '{request.message}' for tenant: {tenant_id}")
-        context_chunks = await retrieve_relevant_chunks(
-            query=request.message,
+        logger.error(f"Chat query: '{chat_request.message}' for tenant: {tenant_id}")
+        context_chunks, similarity_scores = await retrieve_relevant_chunks(
+            query=chat_request.message,
             tenant_id=tenant_id,
             db=db,
             top_k=4
@@ -291,7 +291,7 @@ async def authenticated_chat_query(
         logger.error(f"Retrieved {len(context_chunks)} context chunks")
         
         # Generate answer
-        response_data = await generate_answer(request.message, context_chunks)
+        response_data = await generate_answer(chat_request.message, context_chunks, tenant_id, db, similarity_scores)
         
         # Prepare assistant response
         assistant_message = ChatMessage(
@@ -439,7 +439,7 @@ async def stream_chat_response(
     """Stream chat response using Server-Sent Events"""
     try:
         # Retrieve relevant context
-        context_chunks = await retrieve_relevant_chunks(
+        context_chunks, similarity_scores = await retrieve_relevant_chunks(
             query=message,
             tenant_id=tenant_id,
             db=db,
@@ -448,7 +448,7 @@ async def stream_chat_response(
         
         # Stream the response with preserved formatting
         full_response = ""
-        async for chunk in generate_streaming_response(message, context_chunks):
+        async for chunk in generate_streaming_response(message, context_chunks, tenant_id, db, similarity_scores):
             full_response += chunk
             # Send chunk as SSE
             yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
@@ -457,11 +457,42 @@ async def stream_chat_response(
         from app.core.rag import extract_contact_info, extract_categories_from_chunks
         import re
         
-        chunk_categories = extract_categories_from_chunks(context_chunks) if context_chunks else []
+        chunk_categories = await extract_categories_from_chunks(context_chunks) if context_chunks else []
         contact_info = extract_contact_info(context_chunks) if context_chunks else {}
         
         providers = []
-        if context_chunks:
+        # Extract organization names from categories using semantic patterns
+        logger.debug(f"DEBUG: Extracting providers from {len(chunk_categories)} categories")
+        for category in chunk_categories:
+            # Look for categories that likely contain organization names
+            # Pattern: "Category Type: Organization Name" or just proper noun phrases
+            if ":" in category:
+                # Split on colon and take the part that looks like an organization name
+                parts = category.split(":", 1)
+                if len(parts) == 2:
+                    potential_name = parts[1].strip()
+                    # Check if it looks like an organization name (starts with capital, reasonable length)
+                    if (potential_name and 
+                        len(potential_name) > 3 and 
+                        potential_name[0].isupper() and
+                        potential_name not in providers):
+                        logger.debug(f"DEBUG: Found organization from colon split: '{potential_name}' from '{category}'")
+                        providers.append(potential_name)
+            
+            # Also check for standalone organization names (proper noun phrases)
+            elif (category and 
+                  len(category) > 3 and 
+                  category[0].isupper() and
+                  " " in category and  # Multi-word names more likely to be organizations
+                  not category.lower().startswith(('the ', 'a ', 'an ')) and  # Avoid generic descriptions
+                  category not in providers):
+                logger.debug(f"DEBUG: Found standalone organization: '{category}'")
+                providers.append(category)
+        
+        logger.debug(f"DEBUG: Final extracted providers: {providers}")
+        
+        # Fallback: Look for traditional provider patterns if no organizations found
+        if not providers and context_chunks:
             for chunk in context_chunks:
                 # Look for patterns like "● Name, MD" or "● Name, NP"
                 provider_matches = re.findall(r'●\s*([^●\n]+?(?:,\s*(?:MD|NP|DO|PA|RN))[^●\n]*)', chunk)
@@ -515,14 +546,15 @@ async def stream_chat_response(
         }
         yield f"data: {json.dumps(error_data)}\n\n"
 
-async def generate_streaming_response(message: str, context_chunks: List[str]) -> AsyncGenerator[str, None]:
+async def generate_streaming_response(message: str, context_chunks: List[str], tenant_id: str, db: Session, similarity_scores: List[float] = None) -> AsyncGenerator[str, None]:
     """Generate streaming response using Ollama - collect full response first, then stream with formatting intact"""
     try:
         # Import here to avoid circular imports
-        from app.core.rag import generate_single_prompt_response
+        from app.core.rag import generate_answer
         
-        # Get the complete formatted response from Ollama first
-        full_response = await generate_single_prompt_response(message, context_chunks)
+        # Get the complete formatted response using generate_answer which checks relevance
+        response_data = await generate_answer(message, context_chunks, tenant_id, db, similarity_scores)
+        full_response = response_data["answer"]
         
         # Preserve formatting by ensuring proper line breaks
         # Replace single newlines between sections with double newlines for better rendering
