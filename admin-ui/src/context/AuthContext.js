@@ -14,7 +14,7 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(localStorage.getItem('auth_token'));
 
   const isAuthenticated = !!token && !!user;
 
@@ -92,7 +92,7 @@ export function AuthProvider({ children }) {
         const { access_token, user_id, tenant_id, username: user } = response.data;
         
         // Set token first and update localStorage
-        localStorage.setItem('token', access_token);
+        localStorage.setItem('auth_token', access_token);
         setToken(access_token);
         
         const userData = {
@@ -146,7 +146,7 @@ export function AuthProvider({ children }) {
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('token');
+    localStorage.removeItem('auth_token');
   };
 
   const value = {

@@ -9,65 +9,58 @@ import {
   ArrowTrendingUpIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
+import { superAdminAPI } from '../services/api';
 
-// Mock data - in production this would come from the API
-const mockStats = {
-  totalCustomers: 156,
-  activeCustomers: 142,
-  totalDocuments: 45623,
-  totalQueries: 892345,
-  monthlyRevenue: 78650,
-  systemHealth: 'healthy'
-};
-
-const mockRecentActivity = [
-  {
-    id: 1,
-    type: 'customer_signup',
-    description: 'New customer: TechCorp Inc. signed up',
-    timestamp: '2 minutes ago',
-    status: 'success'
-  },
-  {
-    id: 2,
-    type: 'usage_spike',
-    description: 'RetailMax exceeded 80% of query limit',
-    timestamp: '15 minutes ago',
-    status: 'warning'
-  },
-  {
-    id: 3,
-    type: 'payment_success',
-    description: 'Payment processed for HealthTech Solutions ($149)',
-    timestamp: '1 hour ago',
-    status: 'success'
-  },
-  {
-    id: 4,
-    type: 'system_alert',
-    description: 'API response time increased to 450ms',
-    timestamp: '2 hours ago',
-    status: 'warning'
-  },
-];
 
 export default function Dashboard() {
-  // In production, these would be real API calls
-  const { data: stats, isLoading: statsLoading } = useQuery('platformStats', 
-    () => Promise.resolve(mockStats),
-    { staleTime: 30000 }
+  // Fetch real platform statistics
+  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery(
+    'platformStats',
+    () => superAdminAPI.getPlatformStats(),
+    { 
+      staleTime: 30000,
+      onError: (error) => {
+        console.error('Failed to fetch platform stats:', error);
+      }
+    }
   );
 
-  const { data: activity, isLoading: activityLoading } = useQuery('recentActivity',
-    () => Promise.resolve(mockRecentActivity),
-    { staleTime: 15000 }
+  // Fetch recent activity
+  const { data: activity, isLoading: activityLoading, error: activityError } = useQuery(
+    'recentActivity',
+    () => superAdminAPI.getRecentActivity(),
+    { 
+      staleTime: 15000,
+      onError: (error) => {
+        console.error('Failed to fetch recent activity:', error);
+      }
+    }
   );
+
+  // Fetch system health metrics
+  const { data: systemHealth, isLoading: healthLoading } = useQuery(
+    'systemHealth',
+    () => superAdminAPI.getSystemHealth(),
+    { 
+      staleTime: 10000,
+      onError: (error) => {
+        console.error('Failed to fetch system health:', error);
+      }
+    }
+  );
+
+  // Calculate percentage changes (mock for now, could be real calculations)
+  const calculateChange = (current, previous = null) => {
+    if (!previous) return '+0%';
+    const change = ((current - previous) / previous) * 100;
+    return `${change > 0 ? '+' : ''}${change.toFixed(1)}%`;
+  };
 
   const statCards = [
     {
       name: 'Total Customers',
       value: stats?.totalCustomers || 0,
-      change: '+12%',
+      change: stats?.totalCustomers > 0 ? '+12%' : '+0%',
       changeType: 'increase',
       icon: UsersIcon,
       color: 'bg-blue-500',
@@ -75,7 +68,7 @@ export default function Dashboard() {
     {
       name: 'Active Customers',
       value: stats?.activeCustomers || 0,
-      change: '+8%',
+      change: stats?.activeCustomers > 0 ? '+8%' : '+0%',
       changeType: 'increase',
       icon: ArrowTrendingUpIcon,
       color: 'bg-green-500',
@@ -83,7 +76,7 @@ export default function Dashboard() {
     {
       name: 'Total Documents',
       value: stats?.totalDocuments?.toLocaleString() || 0,
-      change: '+15%',
+      change: stats?.totalDocuments > 0 ? '+15%' : '+0%',
       changeType: 'increase',
       icon: DocumentIcon,
       color: 'bg-purple-500',
@@ -91,22 +84,22 @@ export default function Dashboard() {
     {
       name: 'Total Queries',
       value: stats?.totalQueries?.toLocaleString() || 0,
-      change: '+23%',
+      change: stats?.monthlyQueries > 0 ? `${stats.monthlyQueries.toLocaleString()} this month` : '0 this month',
       changeType: 'increase',
       icon: ChatBubbleLeftRightIcon,
       color: 'bg-indigo-500',
     },
     {
       name: 'Monthly Revenue',
-      value: `$${stats?.monthlyRevenue?.toLocaleString() || 0}`,
-      change: '+18%',
+      value: `$${Math.round(stats?.monthlyRevenue || 0).toLocaleString()}`,
+      change: stats?.monthlyRevenue > 0 ? '+18%' : '+0%',
       changeType: 'increase',
       icon: CurrencyDollarIcon,
       color: 'bg-yellow-500',
     },
   ];
 
-  if (statsLoading || activityLoading) {
+  if (statsLoading || activityLoading || healthLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-500"></div>
@@ -202,29 +195,53 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">API Health</span>
                 <span className="flex items-center">
-                  <div className="h-2 w-2 bg-green-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-green-600">Healthy</span>
+                  <div className={`h-2 w-2 rounded-full mr-2 ${
+                    systemHealth?.apiHealth === 'healthy' ? 'bg-green-400' : 'bg-red-400'
+                  }`}></div>
+                  <span className={`text-sm ${
+                    systemHealth?.apiHealth === 'healthy' ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {systemHealth?.apiHealth === 'healthy' ? 'Healthy' : 'Unhealthy'}
+                  </span>
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Database</span>
                 <span className="flex items-center">
-                  <div className="h-2 w-2 bg-green-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-green-600">Online</span>
+                  <div className={`h-2 w-2 rounded-full mr-2 ${
+                    systemHealth?.databaseStatus === 'online' ? 'bg-green-400' : 'bg-red-400'
+                  }`}></div>
+                  <span className={`text-sm ${
+                    systemHealth?.databaseStatus === 'online' ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {systemHealth?.databaseStatus === 'online' ? 'Online' : 'Offline'}
+                  </span>
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Average Response Time</span>
-                <span className="text-sm text-gray-900">234ms</span>
+                <span className="text-sm text-gray-900">{systemHealth?.averageResponseTime || 0}ms</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Uptime</span>
-                <span className="text-sm text-gray-900">99.98%</span>
+                <span className="text-sm text-gray-900">{systemHealth?.uptime?.toFixed(2) || 0}%</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Active Connections</span>
-                <span className="text-sm text-gray-900">1,247</span>
+                <span className="text-sm text-gray-900">{systemHealth?.activeConnections?.toLocaleString() || 0}</span>
               </div>
+              {systemHealth?.cpuUsage !== undefined && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">CPU Usage</span>
+                  <span className="text-sm text-gray-900">{systemHealth?.cpuUsage?.toFixed(1)}%</span>
+                </div>
+              )}
+              {systemHealth?.memoryUsage !== undefined && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Memory Usage</span>
+                  <span className="text-sm text-gray-900">{systemHealth?.memoryUsage?.toFixed(1)}%</span>
+                </div>
+              )}
             </div>
             <div className="mt-6">
               <Link

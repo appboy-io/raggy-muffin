@@ -2,6 +2,82 @@
 
 This file contains development notes, future features, and technical documentation for the Raggy Muffin RAG platform.
 
+## Performance Optimization - API Provider Migration
+
+### Current Performance Issues
+- Chat API responses taking 3-5+ seconds
+- Ollama running on same machine competing for resources
+- Excessive embedding calls (20-40 per chat request due to semantic filtering)
+- Sequential processing without proper batching
+
+### Selected Architecture (Production Ready)
+**LLM Provider: Groq**
+- Model: `llama3-70b-8192` or `mixtral-8x7b-32768`
+- Speed: 500+ tokens/second (fastest in industry)
+- Pricing: ~$0.10/1M tokens
+- Benefits: Near-instant responses, excellent for customer-facing chat
+
+**Embedding Provider: Voyage AI**
+- Model: `voyage-02` (1024 dimensions) or `voyage-lite-02` for budget
+- Speed: 30-50ms per request
+- Pricing: $0.00002 per query
+- Benefits: Purpose-built for RAG, superior retrieval performance
+
+### Implementation Plan
+1. **Phase 1 - Embedding Migration**
+   - Replace Ollama embeddings with Voyage AI
+   - Update `embed_query_async()` and `embed_chunks_async()` 
+   - Batch embedding requests where possible
+   - Add Redis caching layer for embeddings
+
+2. **Phase 2 - LLM Migration**
+   - Replace Ollama chat with Groq API
+   - Update `generate_answer()` and streaming functions
+   - Implement proper async/await patterns
+   - Add fallback to Ollama for outages
+
+3. **Phase 3 - Optimization**
+   - Disable expensive semantic filtering (save 2-3 seconds)
+   - Pre-compute and cache category embeddings
+   - Implement response caching for common queries
+   - Add connection pooling for PostgreSQL
+
+### Cost Estimates (10K queries/day)
+- LLM (Groq): ~$3/day (~$90/month)
+- Embeddings (Voyage): ~$2/day (~$60/month)
+- **Total: ~$150/month** (vs. current server costs and poor performance)
+
+### Environment Variables Needed
+```bash
+# Groq Configuration
+GROQ_API_KEY=your_api_key_here
+GROQ_MODEL=llama3-70b-8192
+GROQ_MAX_TOKENS=2048
+GROQ_TEMPERATURE=0.7
+
+# Voyage AI Configuration
+VOYAGE_API_KEY=your_api_key_here
+VOYAGE_MODEL=voyage-02
+VOYAGE_BATCH_SIZE=128
+
+# Fallback Configuration
+OLLAMA_HOST=http://localhost:11434  # Keep as backup
+USE_OLLAMA_FALLBACK=true
+```
+
+### Expected Performance Improvements
+- **Current**: 3-5+ seconds per response
+- **After Migration**: 200-500ms per response (10-20x faster)
+- **With Caching**: <100ms for repeated queries
+
+### Migration Notes
+- Keep Ollama running as fallback during transition
+- Test with small subset of tenants first
+- Monitor API costs daily during rollout
+- Consider implementing rate limiting per tenant
+
+---
+
 ## Future Features
 
 ### Media Responses with Semantic Image Search
@@ -55,6 +131,87 @@ media_embeddings: media_id, embedding_type, embedding_vector
 - Vector embedding service for semantic search
 - File storage solution (local or cloud)
 - Enhanced chat widget to display images
+
+---
+
+### Session-based Multi-lingual Support with Auto-Detection
+**Status**: Not implemented  
+**Priority**: Medium-High  
+**Description**: Automatically detect user's language and respond in the same language, with intelligent session-based language persistence.
+
+**Implementation Approach**:
+- **Automatic Language Detection**:
+  - Detect language from user's first message in a session
+  - Use lightweight library (langdetect or polyglot) for accurate detection
+  - Support for 50+ languages out of the box
+  - No user configuration required - just start typing
+
+- **Session Intelligence**:
+  - Remember detected language for entire chat session
+  - Allow language switching mid-conversation if detected
+  - Graceful fallback to English when language cannot be determined
+  - Store language preference in chat session metadata
+
+- **Smart Response Handling**:
+  - Respond in user's detected language
+  - Keep document quotes in original language
+  - Translate system messages and errors
+  - Mix languages appropriately (e.g., English documents, Spanish responses)
+
+**Technical Implementation**:
+```python
+# Backend changes
+class ChatSession:
+    detected_language: str = None
+    language_confidence: float = 0.0
+    
+    async def process_message(self, message: str):
+        # First message: detect and store language
+        if not self.detected_language:
+            self.detected_language = detect(message)
+            self.language_confidence = detect_confidence(message)
+        
+        # Add to system prompt
+        system_prompt += f"\nUser language: {self.detected_language}"
+        system_prompt += f"\nRespond in {self.detected_language}."
+        system_prompt += "\nKeep document quotes in their original language."
+
+# Database schema addition
+chat_sessions: 
+  - Add: detected_language VARCHAR(10)
+  - Add: language_confidence FLOAT
+```
+
+**Widget UI Adaptation**:
+- Auto-translate welcome message based on detected language
+- Dynamically update placeholder text
+- Translate error messages and system notifications
+- Show subtle language indicator (flag or code)
+
+**Advanced Features**:
+- **Mixed Language Support**: Handle users who switch between languages
+- **Regional Dialects**: Detect regional variations (es-MX vs es-ES)
+- **RTL Support**: Automatically adjust UI for Arabic, Hebrew, etc.
+- **Confidence Threshold**: Only auto-detect when confidence > 80%
+
+**Benefits**:
+- Zero configuration for users - just start chatting
+- Natural multi-lingual conversations
+- Improved accessibility for global users
+- Better engagement with non-English speakers
+- Maintains document integrity while localizing responses
+
+**Use Cases**:
+- Spanish-speaking user asks about English documentation
+- Multi-lingual support teams serving global customers
+- International businesses with diverse client base
+- Educational platforms with students worldwide
+
+**Dependencies**:
+- Python langdetect or polyglot library
+- LLM models already support multi-lingual responses
+- Frontend RTL CSS support for Arabic/Hebrew
+- Session storage for language persistence
 
 ---
 
@@ -168,6 +325,53 @@ media_embeddings: media_id, embedding_type, embedding_vector
 - **Frontend**: React with React Router, TailwindCSS, and React Query
 - **API**: FastAPI with SQLAlchemy ORM, async/sync hybrid approach
 - **Deployment**: Docker containers with production optimization
+
+---
+
+### Semantic Context Filtering (RAG Improvement)
+**Status**: Not implemented  
+**Priority**: High (Next Development Task)  
+**Description**: Improve RAG response accuracy by filtering context chunks based on semantic relevance to the user's query, preventing the LLM from pulling irrelevant information from mixed-content chunks.
+
+**Current Problem**: 
+- Large context chunks contain mixed information (e.g., physical therapy providers mixed with mental health providers)
+- LLM sometimes selects wrong information from context (e.g., returning grief counseling phone number when asked about physical therapy)
+- No keyword-based filtering needed - must scale automatically for any business type
+
+**Implementation Approach**:
+```python
+async def filter_context_by_semantic_relevance(query: str, chunks: List[str], threshold: float = 0.7) -> List[str]:
+    query_embedding = await embed_query_async(query)
+    relevant_chunks = []
+    
+    for chunk in chunks:
+        # Split chunk into sections (by bullets, paragraphs, etc.)
+        sections = split_into_sections(chunk)
+        for section in sections:
+            section_embedding = await embed_query_async(section[:200])  # First 200 chars
+            similarity = cosine_similarity(query_embedding, section_embedding)
+            if similarity > threshold:
+                relevant_chunks.append(section)
+    
+    return relevant_chunks[:3]  # Return top 3 most relevant
+```
+
+**Integration Points**:
+- Modify `retrieve_relevant_chunks()` in `/api/app/core/rag.py`
+- Add semantic filtering between similarity search and LLM generation
+- Use existing embedding infrastructure (`embed_query_async`)
+
+**Benefits**:
+- **Zero maintenance** - Works automatically for any business type (restaurants, legal, medical, etc.)
+- **Leverages existing infrastructure** - Uses current embedding system
+- **Improves accuracy** - Prevents LLM from using irrelevant context information
+- **Scalable** - No keyword lists to maintain as platform grows
+
+**Technical Requirements**:
+- Add section splitting logic (split by bullet points, paragraphs, headers)
+- Implement cosine similarity calculation for embeddings  
+- Add semantic relevance threshold configuration
+- Integration with existing `retrieve_relevant_chunks` function
 
 ---
 

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useQuery } from 'react-query';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
+import { customerAPI } from '../services/api';
 import {
   HomeIcon,
   DocumentIcon,
@@ -33,6 +35,12 @@ export default function Layout({ children }) {
   const { config } = useConfig();
   const location = useLocation();
   const navigate = useNavigate();
+  
+  // Fetch dashboard data for avatar
+  const { data: dashboard } = useQuery('dashboard', customerAPI.getDashboard, {
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   const handleLogout = () => {
     logout();
@@ -56,14 +64,14 @@ export default function Layout({ children }) {
               <XMarkIcon className="h-6 w-6 text-white" />
             </button>
           </div>
-          <SidebarContent config={config} location={location} handleLogout={handleLogout} user={user} />
+          <SidebarContent config={config} location={location} handleLogout={handleLogout} user={user} avatarUrl={dashboard?.widget_config?.avatar_url} />
         </div>
       </div>
 
       {/* Desktop sidebar */}
       <div className="hidden md:flex md:flex-shrink-0">
         <div className="flex flex-col w-64">
-          <SidebarContent config={config} location={location} handleLogout={handleLogout} user={user} />
+          <SidebarContent config={config} location={location} handleLogout={handleLogout} user={user} avatarUrl={dashboard?.widget_config?.avatar_url} />
         </div>
       </div>
 
@@ -93,14 +101,22 @@ export default function Layout({ children }) {
   );
 }
 
-function SidebarContent({ config, location, handleLogout, user }) {
+function SidebarContent({ config, location, handleLogout, user, avatarUrl }) {
   return (
     <div className="flex-1 flex flex-col min-h-0 border-r border-gray-200 bg-white">
       {/* Logo */}
       <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
         <div className="flex items-center flex-shrink-0 px-4">
           <div className="flex items-center">
-            <span className="text-2xl mr-2">{config.brand_logo}</span>
+            {avatarUrl ? (
+              <img 
+                src={`${process.env.REACT_APP_API_URL}${avatarUrl}`}
+                alt={`${config.brand_name} logo`}
+                className="h-8 w-8 rounded-full mr-2 object-cover"
+              />
+            ) : (
+              <span className="text-2xl mr-2">{config.brand_logo}</span>
+            )}
             <h1 className="text-xl font-bold text-gray-900">{config.brand_name}</h1>
           </div>
         </div>

@@ -162,7 +162,7 @@ async def upload_document(
                         tenant_id=tenant,
                         content=content,
                         embedding=embedding,
-                        metadata={"document_id": str(document.id)}
+                        meta_data={"document_id": str(document.id)}
                     )
                     batch_embeddings.append(emb)
                 

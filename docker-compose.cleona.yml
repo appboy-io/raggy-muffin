@@ -105,6 +105,7 @@ services:
       # Cleona Branding Configuration
       BRAND_NAME: Cleona
       BRAND_LOGO: 🏥
+      BRAND_LOGO_URL: "https://yourimageshare.com/ib/Jl83j2fKrZ.png"
       PRIMARY_COLOR: "#2E8B57"
       SECONDARY_COLOR: "#4682B4"
       
@@ -149,6 +150,7 @@ services:
       REACT_APP_WIDGET_DOMAIN: https://cleona.ragamuffin.app
       REACT_APP_BRAND_NAME: Cleona
       REACT_APP_BRAND_LOGO: "🏥"
+      REACT_APP_BRAND_LOGO_URL: "https://yourimageshare.com/ib/Jl83j2fKrZ.png"
       REACT_APP_PRIMARY_COLOR: "#2E8B57"
       REACT_APP_SECONDARY_COLOR: "#4682B4"
 
@@ -157,6 +159,12 @@ services:
       context: ./frontend-ui
       args:
         REACT_APP_API_URL: https://cleona.ragamuffin.app
+        REACT_APP_BRAND_NAME: Cleona
+        REACT_APP_BRAND_LOGO: "🏥"
+        REACT_APP_BRAND_LOGO_URL: "https://yourimageshare.com/ib/Jl83j2fKrZ.png"
+        REACT_APP_PRIMARY_COLOR: "#2E8B57"
+        REACT_APP_SECONDARY_COLOR: "#4682B4"
+        REACT_APP_WIDGET_DOMAIN: https://cleona.ragamuffin.app
         PUBLIC_URL: /frontend
     container_name: cleona_frontend_ui
     restart: always
@@ -177,6 +185,7 @@ services:
       REACT_APP_WIDGET_DOMAIN: https://cleona.ragamuffin.app
       REACT_APP_BRAND_NAME: Cleona
       REACT_APP_BRAND_LOGO: "🏥"
+      REACT_APP_BRAND_LOGO_URL: "https://yourimageshare.com/ib/Jl83j2fKrZ.png"
       REACT_APP_PRIMARY_COLOR: "#2E8B57"
       REACT_APP_SECONDARY_COLOR: "#4682B4"
       PUBLIC_URL: /frontend
@@ -204,6 +213,7 @@ services:
       REACT_APP_API_URL: https://cleona.ragamuffin.app
       REACT_APP_BRAND_NAME: Cleona
       REACT_APP_BRAND_LOGO: "🏥"
+      REACT_APP_BRAND_LOGO_URL: "https://yourimageshare.com/ib/Jl83j2fKrZ.png"
       REACT_APP_PRIMARY_COLOR: "#2E8B57"
       REACT_APP_SECONDARY_COLOR: "#4682B4"
 

@@ -17,7 +17,8 @@ class ClientConfig:
         
         # Client Branding
         self.BRAND_NAME = os.getenv('BRAND_NAME', 'Generic RAG')
-        self.BRAND_LOGO = os.getenv('BRAND_LOGO', '🤖')
+        self.BRAND_LOGO = os.getenv('BRAND_LOGO', '🤖')  # Can be emoji or URL
+        self.BRAND_LOGO_URL = os.getenv('BRAND_LOGO_URL', '')  # Optional: URL to logo image
         self.PRIMARY_COLOR = os.getenv('PRIMARY_COLOR', '#0066cc')
         self.SECONDARY_COLOR = os.getenv('SECONDARY_COLOR', '#666666')
         
@@ -46,6 +47,7 @@ class ClientConfig:
         return {
             'brand_name': self.BRAND_NAME,
             'brand_logo': self.BRAND_LOGO,
+            'brand_logo_url': self.BRAND_LOGO_URL,
             'primary_color': self.PRIMARY_COLOR,
             'secondary_color': self.SECONDARY_COLOR,
             'max_documents': self.MAX_DOCUMENTS_PER_TENANT,

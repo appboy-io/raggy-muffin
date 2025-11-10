@@ -41,12 +41,14 @@ from app.routers.documents import router as documents_router
 from app.routers.chat import router as chat_router
 from app.routers.widgets import router as widgets_router
 from app.routers.customer import router as customer_router
+from app.routers.agent import router as agent_router
 from app.routers.superadmin import router as superadmin_router
 
 app.include_router(documents_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(widgets_router, prefix="/api/v1")
 app.include_router(customer_router, prefix="/api/v1")
+app.include_router(agent_router, prefix="/api/v1")
 
 # Superadmin router (no version prefix as it's separate from tenant API)
 app.include_router(superadmin_router)

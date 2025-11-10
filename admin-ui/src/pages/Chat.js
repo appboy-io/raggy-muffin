@@ -11,6 +11,10 @@ import {
   EnvelopeIcon,
   GlobeAltIcon,
   MapPinIcon,
+  ChatBubbleLeftRightIcon,
+  CogIcon,
+  EyeIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 
 // Component to format assistant messages with proper styling
@@ -163,7 +167,56 @@ function FormattedAssistantMessage({ content, isStreaming = false }) {
   );
 }
 
+// Tooltip component for agent settings
+function Tooltip({ children, content, position = "right" }) {
+  const [isVisible, setIsVisible] = useState(false);
+  
+  const positionClasses = {
+    right: "left-full top-1/2 -translate-y-1/2 ml-2",
+    left: "right-full top-1/2 -translate-y-1/2 mr-2",
+    top: "bottom-full left-1/2 -translate-x-1/2 mb-2",
+    bottom: "top-full left-1/2 -translate-x-1/2 mt-2"
+  };
+
+  return (
+    <div className="relative inline-block">
+      <div
+        onMouseEnter={() => setIsVisible(true)}
+        onMouseLeave={() => setIsVisible(false)}
+      >
+        {children}
+      </div>
+      {isVisible && (
+        <div className={`absolute z-50 ${positionClasses[position]}`}>
+          <div className="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 max-w-xs shadow-lg">
+            <div className="relative">
+              {content}
+              {/* Arrow pointer */}
+              {position === "right" && (
+                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+              )}
+              {position === "left" && (
+                <div className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+              )}
+              {position === "top" && (
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+              )}
+              {position === "bottom" && (
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Chat() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState('chat');
+  
+  // Chat state
   const [message, setMessage] = useState('');
   const [currentSession, setCurrentSession] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -171,12 +224,117 @@ export default function Chat() {
   const [streamingMessageId, setStreamingMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const { config } = useConfig();
+  
+  // Agent settings state
+  const [agentConfig, setAgentConfig] = useState(null);
+  const [agentConfigLoading, setAgentConfigLoading] = useState(false);
+  const [personalityOptions, setPersonalityOptions] = useState(null);
+  const [previewPrompt, setPreviewPrompt] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const { data: sessions } = useQuery('chatSessions', chatAPI.getChatSessions);
   const { data: dashboard } = useQuery('dashboard', customerAPI.getDashboard);
   
   // Debug logging
   console.log('Dashboard data:', dashboard);
+
+  // Load agent config and personality options on tab change
+  useEffect(() => {
+    if (activeTab === 'settings') {
+      loadAgentConfig();
+      loadPersonalityOptions();
+    }
+  }, [activeTab]);
+
+  const loadAgentConfig = async () => {
+    setAgentConfigLoading(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/agent/config`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const config = await response.json();
+        setAgentConfig(config);
+      } else {
+        throw new Error('Failed to load agent config');
+      }
+    } catch (error) {
+      console.error('Error loading agent config:', error);
+      toast.error('Failed to load agent settings');
+    } finally {
+      setAgentConfigLoading(false);
+    }
+  };
+
+  const loadPersonalityOptions = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/agent/personality-options`);
+      
+      if (response.ok) {
+        const options = await response.json();
+        setPersonalityOptions(options);
+      }
+    } catch (error) {
+      console.error('Error loading personality options:', error);
+    }
+  };
+
+  const updateAgentConfig = async (configData) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/agent/config`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(configData)
+      });
+      
+      if (response.ok) {
+        const updatedConfig = await response.json();
+        setAgentConfig(updatedConfig);
+        toast.success('Agent settings saved successfully!');
+        return true;
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to update agent config');
+      }
+    } catch (error) {
+      console.error('Error updating agent config:', error);
+      toast.error(error.message || 'Failed to save agent settings');
+      return false;
+    }
+  };
+
+  const generatePreview = async (configData) => {
+    setPreviewLoading(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/agent/preview-prompt`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(configData)
+      });
+      
+      if (response.ok) {
+        const preview = await response.json();
+        setPreviewPrompt(preview.preview);
+      } else {
+        throw new Error('Failed to generate preview');
+      }
+    } catch (error) {
+      console.error('Error generating preview:', error);
+      toast.error('Failed to generate preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const sendMessageMutation = useMutation(
     ({ message, sessionId }) => chatAPI.sendMessage(message, sessionId),
@@ -270,7 +428,7 @@ export default function Chat() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
         body: JSON.stringify({
           message: currentMessage,
@@ -371,6 +529,311 @@ export default function Chat() {
     }
   };
 
+  const AgentSettings = () => {
+    const [localConfig, setLocalConfig] = useState(null);
+    const [showPreview, setShowPreview] = useState(false);
+
+    useEffect(() => {
+      if (agentConfig) {
+        setLocalConfig({ ...agentConfig });
+      }
+    }, [agentConfig]);
+
+    const handleConfigChange = (field, value) => {
+      setLocalConfig(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    };
+
+    const handlePersonalityTraitToggle = (trait) => {
+      const currentTraits = localConfig?.personality_traits || [];
+      const newTraits = currentTraits.includes(trait)
+        ? currentTraits.filter(t => t !== trait)
+        : [...currentTraits, trait];
+      
+      if (newTraits.length <= 5) {
+        handleConfigChange('personality_traits', newTraits);
+      } else {
+        toast.error('Maximum 5 personality traits allowed');
+      }
+    };
+
+    const handleSave = async () => {
+      if (!localConfig) return;
+      
+      const success = await updateAgentConfig(localConfig);
+      if (success) {
+        setShowPreview(false);
+      }
+    };
+
+    const handleGeneratePreview = async () => {
+      if (!localConfig) return;
+      
+      await generatePreview({
+        agent_name: localConfig.agent_name,
+        agent_role: localConfig.agent_role,
+        personality_traits: localConfig.personality_traits,
+        custom_instructions: localConfig.custom_instructions,
+        response_style: localConfig.response_style,
+        industry: localConfig.industry
+      });
+      setShowPreview(true);
+    };
+
+    if (agentConfigLoading) {
+      return (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <span className="ml-2">Loading agent settings...</span>
+        </div>
+      );
+    }
+
+    if (!localConfig || !personalityOptions) {
+      return (
+        <div className="text-center py-12">
+          <CogIcon className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-4 text-lg font-medium text-gray-900">
+            Unable to load settings
+          </h3>
+          <p className="mt-2 text-gray-600">
+            Please try refreshing the page.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+            <Tooltip content="Configure your agent's basic identity and role. This determines how your agent introduces itself to users.">
+              <InformationCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 cursor-help" />
+            </Tooltip>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Agent Name
+                </label>
+                <Tooltip content="The name your agent will use when introducing itself to users. Keep it simple and memorable." position="top">
+                  <InformationCircleIcon className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                </Tooltip>
+              </div>
+              <input
+                type="text"
+                value={localConfig.agent_name || ''}
+                onChange={(e) => handleConfigChange('agent_name', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Assistant"
+                maxLength={50}
+              />
+            </div>
+            
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Agent Role
+                </label>
+                <Tooltip content="Describes what your agent's primary function is (e.g., 'Customer Support Assistant', 'Healthcare Navigator'). This helps set user expectations." position="top">
+                  <InformationCircleIcon className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                </Tooltip>
+              </div>
+              <input
+                type="text"
+                value={localConfig.agent_role || ''}
+                onChange={(e) => handleConfigChange('agent_role', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="helpful assistant"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Agent First Response
+              </label>
+              <Tooltip content="The initial message your AI agent will send when starting a new conversation. This is different from the widget's welcome message that users see before chatting." position="top">
+                <InformationCircleIcon className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+              </Tooltip>
+            </div>
+            <textarea
+              value={localConfig.greeting_message || ''}
+              onChange={(e) => handleConfigChange('greeting_message', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              rows={3}
+              maxLength={500}
+              placeholder="Hello! I'm here to help you with any questions you have."
+            />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Personality & Style</h3>
+            <Tooltip content="Define how your agent communicates and behaves. These settings shape the tone and style of responses.">
+              <InformationCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 cursor-help" />
+            </Tooltip>
+          </div>
+          
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Personality Traits (Max 5)
+              </label>
+              <Tooltip content="Select up to 5 traits that define your agent's personality. These influence how the agent expresses itself and interacts with users." position="top">
+                <InformationCircleIcon className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+              </Tooltip>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {personalityOptions.personality_traits.map((trait) => (
+                <button
+                  key={trait.value}
+                  onClick={() => handlePersonalityTraitToggle(trait.value)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    (localConfig.personality_traits || []).includes(trait.value)
+                      ? 'bg-indigo-100 border-indigo-200 text-indigo-700'
+                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {trait.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Response Style
+                </label>
+                <Tooltip content="Controls how formal or casual your agent's responses are. This affects sentence structure, vocabulary, and overall tone." position="top">
+                  <InformationCircleIcon className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                </Tooltip>
+              </div>
+              <select
+                value={localConfig.response_style || 'conversational'}
+                onChange={(e) => handleConfigChange('response_style', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                {personalityOptions.response_styles.map((style) => (
+                  <option key={style.value} value={style.value}>
+                    {style.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Industry
+                </label>
+                <Tooltip content="Select the industry context for your agent. This helps the agent use appropriate terminology and understand industry-specific concepts." position="top">
+                  <InformationCircleIcon className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                </Tooltip>
+              </div>
+              <select
+                value={localConfig.industry || 'general'}
+                onChange={(e) => handleConfigChange('industry', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                {personalityOptions.industries.map((industry) => (
+                  <option key={industry.value} value={industry.value}>
+                    {industry.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Advanced Settings</h3>
+            <Tooltip content="Fine-tune your agent's behavior with custom instructions and advanced prompting. These settings require technical knowledge.">
+              <InformationCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 cursor-help" />
+            </Tooltip>
+          </div>
+          
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Custom Instructions
+              </label>
+              <Tooltip content="Add specific guidelines or rules for your agent to follow. For example: 'Always ask for clarification before providing medical advice' or 'Limit responses to 100 words'." position="top">
+                <InformationCircleIcon className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+              </Tooltip>
+            </div>
+            <textarea
+              value={localConfig.custom_instructions || ''}
+              onChange={(e) => handleConfigChange('custom_instructions', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              rows={4}
+              placeholder="Add any specific instructions for your agent..."
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                System Prompt Override (Advanced)
+              </label>
+              <Tooltip content="⚠️ Advanced users only. This completely replaces the auto-generated system prompt. Leave empty to use the settings above. Incorrect prompts can break your agent's functionality." position="top">
+                <InformationCircleIcon className="h-4 w-4 text-yellow-500 hover:text-yellow-600 cursor-help" />
+              </Tooltip>
+            </div>
+            <textarea
+              value={localConfig.system_prompt || ''}
+              onChange={(e) => handleConfigChange('system_prompt', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              rows={6}
+              maxLength={5000}
+              placeholder="Leave empty to use auto-generated prompt based on settings above..."
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              If provided, this will override the auto-generated prompt entirely.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center">
+          <button
+            onClick={handleGeneratePreview}
+            disabled={previewLoading}
+            className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md font-medium flex items-center space-x-2"
+          >
+            <EyeIcon className="h-4 w-4" />
+            <span>{previewLoading ? 'Generating...' : 'Preview Prompt'}</span>
+          </button>
+
+          <button
+            onClick={handleSave}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-md font-medium"
+          >
+            Save Settings
+          </button>
+        </div>
+
+        {showPreview && previewPrompt && (
+          <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+            <h4 className="text-lg font-medium text-gray-900 mb-3">Generated Prompt Preview</h4>
+            <pre className="whitespace-pre-wrap text-sm text-gray-700 bg-white p-4 rounded border max-h-96 overflow-y-auto">
+              {previewPrompt}
+            </pre>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="h-screen flex">
       {/* Sidebar - Sessions */}
@@ -418,13 +881,13 @@ export default function Chat() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-medium text-gray-900">
-                Test Your {config.brand_name} Assistant
+                {config.brand_name} Assistant
               </h1>
               <p className="text-sm text-gray-500">
-                Try out your AI assistant before sharing with users
+                Test your AI assistant and manage its settings
               </p>
             </div>
-            {currentSession && (
+            {activeTab === 'chat' && currentSession && (
               <div className="text-sm text-gray-500">
                 Session: {currentSession.slice(0, 8)}...
               </div>
@@ -432,120 +895,159 @@ export default function Chat() {
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
-          <div className="max-w-3xl mx-auto space-y-6">
-            {messages.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="bg-white rounded-lg p-8 shadow-sm">
-                  <ComputerDesktopIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    Welcome to {config.brand_name}
-                  </h3>
-                  <p className="text-gray-600 mb-4">
-                    Start a conversation to test your AI assistant. Ask questions about your uploaded documents.
-                  </p>
-                  <div className="text-sm text-gray-500">
-                    <p>Try asking:</p>
-                    <ul className="mt-2 space-y-1">
-                      <li>• "What services are available?"</li>
-                      <li>• "How can I get help with housing?"</li>
-                      <li>• "What medical resources do you have?"</li>
-                    </ul>
-                  </div>
-                </div>
+        {/* Tabs */}
+        <div className="bg-white border-b border-gray-200 px-6">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('chat')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'chat'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <ChatBubbleLeftRightIcon className="h-5 w-5" />
+                <span>Chat</span>
               </div>
-            ) : (
-              messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`flex max-w-xs lg:max-w-2xl ${msg.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                    <div className={`flex-shrink-0 ${msg.type === 'user' ? 'ml-3' : 'mr-3'}`}>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        msg.type === 'user' ? 'bg-indigo-500' : 'bg-gray-400'
-                      }`}>
-                        {msg.type === 'user' ? (
-                          <UserIcon className="w-5 h-5 text-white" />
-                        ) : dashboard?.widget_config?.avatar_url ? (
-                          <img
-                            src={`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}${dashboard.widget_config.avatar_url}`}
-                            alt="Assistant avatar"
-                            className="w-5 h-5 rounded-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-white text-sm">{config.brand_logo}</span>
-                        )}
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'settings'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <CogIcon className="h-5 w-5" />
+                <span>Agent Settings</span>
+              </div>
+            </button>
+          </nav>
+        </div>
+
+        {/* Main Content Area */}
+        {activeTab === 'chat' ? (
+          <>
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+              <div className="max-w-3xl mx-auto space-y-6">
+                {messages.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="bg-white rounded-lg p-8 shadow-sm">
+                      <ComputerDesktopIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        Welcome to {config.brand_name}
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        Start a conversation to test your AI assistant. Ask questions about your uploaded documents.
+                      </p>
+                      <div className="text-sm text-gray-500">
+                        <p>Try asking:</p>
+                        <ul className="mt-2 space-y-1">
+                          <li>• "What services are available?"</li>
+                          <li>• "How can I get help with housing?"</li>
+                          <li>• "What medical resources do you have?"</li>
+                        </ul>
                       </div>
                     </div>
-                    <div className={`rounded-lg px-4 py-2 ${
-                      msg.type === 'user'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-white border border-gray-200'
-                    }`}>
-                      <div className="text-sm">
-                        {msg.type === 'assistant' ? (
-                          <FormattedAssistantMessage content={msg.content} isStreaming={msg.isStreaming} />
-                        ) : (
-                          <div className="whitespace-pre-wrap">{msg.content}</div>
-                        )}
-                      </div>
-                      
-                      {/* Show metadata for assistant messages */}
-                      {msg.type === 'assistant' && msg.metadata && (
-                        <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                          {msg.metadata.categories?.length > 0 && (
-                            <div className="mb-2">
-                              <strong>Categories:</strong> {msg.metadata.categories.join(', ')}
-                            </div>
-                          )}
-                          {msg.metadata.providers?.length > 0 && (
-                            <div className="mb-2">
-                              <strong>Providers:</strong> {msg.metadata.providers.join(', ')}
-                            </div>
-                          )}
-                          {msg.metadata.sources?.length > 0 && (
-                            <div>
-                              <strong>Sources:</strong> {msg.metadata.sources.length} document chunks
+                  </div>
+                ) : (
+                  messages.map((msg) => (
+                    <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex max-w-xs lg:max-w-2xl ${msg.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                        <div className={`flex-shrink-0 ${msg.type === 'user' ? 'ml-3' : 'mr-3'}`}>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            msg.type === 'user' ? 'bg-indigo-500' : 'bg-gray-400'
+                          }`}>
+                            {msg.type === 'user' ? (
+                              <UserIcon className="w-5 h-5 text-white" />
+                            ) : dashboard?.widget_config?.avatar_url ? (
+                              <img
+                                src={`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}${dashboard.widget_config.avatar_url}`}
+                                alt="Assistant avatar"
+                                className="w-5 h-5 rounded-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-white text-sm">{config.brand_logo}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className={`rounded-lg px-4 py-2 ${
+                          msg.type === 'user'
+                            ? 'bg-indigo-500 text-white'
+                            : 'bg-white border border-gray-200'
+                        }`}>
+                          <div className="text-sm">
+                            {msg.type === 'assistant' ? (
+                              <FormattedAssistantMessage content={msg.content} isStreaming={msg.isStreaming} />
+                            ) : (
+                              <div className="whitespace-pre-wrap">{msg.content}</div>
+                            )}
+                          </div>
+                          
+                          {/* Show metadata for assistant messages */}
+                          {msg.type === 'assistant' && msg.metadata && (
+                            <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                              {msg.metadata.categories?.length > 0 && (
+                                <div className="mb-2">
+                                  <strong>Categories:</strong> {msg.metadata.categories.join(', ')}
+                                </div>
+                              )}
+                              {msg.metadata.providers?.length > 0 && (
+                                <div className="mb-2">
+                                  <strong>Providers:</strong> {msg.metadata.providers.join(', ')}
+                                </div>
+                              )}
+                              {msg.metadata.sources?.length > 0 && (
+                                <div>
+                                  <strong>Sources:</strong> {msg.metadata.sources.length} document chunks
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-
-        {/* Input */}
-        <div className="bg-white border-t border-gray-200 px-6 py-4">
-          <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-            <div className="flex space-x-4">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Type your message..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  disabled={isStreaming}
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={!message.trim() || isStreaming}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isStreaming ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <PaperAirplaneIcon className="w-5 h-5" />
+                  ))
                 )}
-              </button>
+                <div ref={messagesEndRef} />
+              </div>
             </div>
-          </form>
-        </div>
+
+            {/* Input */}
+            <div className="bg-white border-t border-gray-200 px-6 py-4">
+              <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
+                <div className="flex space-x-4">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      placeholder="Type your message..."
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      disabled={isStreaming}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!message.trim() || isStreaming}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isStreaming ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <PaperAirplaneIcon className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </>
+        ) : (
+          <AgentSettings />
+        )}
       </div>
     </div>
   );

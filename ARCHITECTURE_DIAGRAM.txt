@@ -1,0 +1,204 @@
+RAGGY MUFFIN RAG PLATFORM - ARCHITECTURE DIAGRAM
+================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            FRONTEND LAYER                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐         │
+│   │   Admin UI       │  │  Widget Frontend │  │  Super Admin UI  │         │
+│   │   (Port 3000)    │  │   (Port 3001)    │  │   (Port 3003)    │         │
+│   │                  │  │                  │  │                  │         │
+│   │ • Dashboard      │  │ • Chat Widget    │  │ • Customers      │         │
+│   │ • Documents      │  │ • Conversations  │  │ • Analytics      │         │
+│   │ • Widget Config  │  │ • Branding       │  │ • Settings       │         │
+│   │ • Analytics      │  │ • Messages       │  │ • Auditing       │         │
+│   └──────────────────┘  └──────────────────┘  └──────────────────┘         │
+│                                                                               │
+│   ┌──────────────────────────────────────────────────────────────────────┐  │
+│   │            Legacy Streamlit Dashboard (Port 8501)                    │  │
+│   │            • Document Upload • Querying (Deprecated)                 │  │
+│   └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    │  REST API Calls                   │
+                    │  JWT Bearer Auth                  │
+                    └─────────────────┬─────────────────┘
+                                      │
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          API LAYER (FastAPI)                                │
+│                         Port: 8000 (Internal)                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                        Main FastAPI App                               │ │
+│  │  • CORS Middleware    • Rate Limiting    • Authentication Check       │ │
+│  │  • Setup Middleware   • Error Handling   • Static File Serving        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐       │
+│  │    Auth      │ │  Documents   │ │    Chat      │ │  Widgets     │       │
+│  │   Router     │ │   Router     │ │   Router     │ │   Router     │       │
+│  │ (288 LOC)    │ │ (288 LOC)    │ │ (717 LOC)    │ │ (641 LOC)    │       │
+│  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘       │
+│                                                                               │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐       │
+│  │   Customer   │ │   Agent      │ │  Super Admin │ │  Utilities   │       │
+│  │   Router     │ │   Router     │ │   Router     │ │ & Middleware │       │
+│  │ (351 LOC)    │ │ (329 LOC)    │ │ (886 LOC)    │ │              │       │
+│  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘       │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                    ┌─────────────────┼─────────────────┐
+                    │                 │                 │
+        ┌───────────▼──┐  ┌───────────▼──┐  ┌──────────▼───┐
+        │   Auth Core  │  │  RAG Core    │  │ Doc Processor│
+        │              │  │              │  │              │
+        │• AWS Cognito │  │• Embedding   │  │• PDF Extract │
+        │• JWT Verify  │  │• Chunking    │  │• CSV Parsing │
+        │• Tenant ID   │  │• Vector Sim. │  │• Excel Ext.  │
+        │• Sessions    │  │• LLM Gen.    │  │• Text Files  │
+        └───────────┬──┘  └───────────┬──┘  └──────────┬───┘
+                    │                 │                 │
+                    └─────────────────┼─────────────────┘
+                                      │
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        DATA LAYER & SERVICES                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌─────────────────────┐  ┌─────────────────────┐  ┌──────────────────┐   │
+│  │   PostgreSQL 14+    │  │  Ollama LLM Server  │  │   Redis Cache    │   │
+│  │   with pgvector     │  │  (Port 11434)       │  │  (Port 6379)     │   │
+│  │   (Port 5432)       │  │                     │  │                  │   │
+│  │                     │  │  • nomic-embed-text │  │ • Session cache  │   │
+│  │ Tables (17):        │  │    (768-dim)        │  │ • Response cache │   │
+│  │ • embeddings        │  │                     │  │ • Metadata cache │   │
+│  │ • documents         │  │ • llama3.2:3b       │  │                  │   │
+│  │ • chat_sessions     │  │   (quantized)       │  │ Volume:          │   │
+│  │ • chat_messages     │  │                     │  │ cleona_redis_data│   │
+│  │ • customer_profiles │  │ Volume:             │  │                  │   │
+│  │ • widget_configs    │  │ cleona_ollama       │  │ Config:          │   │
+│  │ • agent_configs     │  │                     │  │ redis.conf       │   │
+│  │ • tenant_usage      │  │ ┌─────────────────┐ │  │                  │   │
+│  │ • superadmins       │  │ │ Model Storage   │ │  │                  │   │
+│  │ • superadmin_       │  │ │ (Persistent Vol)│ │  │                  │   │
+│  │   sessions          │  │ └─────────────────┘ │  │                  │   │
+│  │ • superadmin_audit_ │  │                     │  │                  │   │
+│  │   log               │  │                     │  │                  │   │
+│  │ • superadmin_       │  │                     │  │                  │   │
+│  │   notifications     │  │                     │  │                  │   │
+│  │ • system_config     │  │                     │  │                  │   │
+│  │                     │  │                     │  │                  │   │
+│  │ Volume:             │  │                     │  │                  │   │
+│  │ cleona_pgdata       │  │                     │  │                  │   │
+│  └─────────────────────┘  └─────────────────────┘  └──────────────────┘   │
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                  AWS Cognito (External)                             │  │
+│  │              • User Authentication  • JWT Tokens                    │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+DOCUMENT PROCESSING PIPELINE
+=============================
+
+Upload → Validate → Extract → Chunk → Embed → Store → Process Status
+         Size/Type   PDF/CSV   150-800  Ollama    DB     Complete
+                     Excel      words    768-dim  Index
+                     TXT
+
+CHAT QUERY PIPELINE
+====================
+
+Message → Embed → Vector Search → Filter → Generate → Stream → Save
+          Query   pgvector       Location  Ollama     SSE    History
+          768-dim  KNN           Semantic  llama3.2
+
+MULTI-TENANCY & SECURITY
+=========================
+
+User Login
+    ↓
+AWS Cognito
+    ↓
+JWT Token + Tenant ID
+    ↓
+FastAPI Dependency Injection
+    ↓
+Tenant ID Extraction & Validation
+    ↓
+Database Query Scoped to Tenant
+    ↓
+CORS Domain Validation (Widget)
+    ↓
+Rate Limiting Applied
+    ↓
+Response Returned
+
+DEPLOYMENT STRUCTURE
+====================
+
+┌─────────────────────────────────────────────────────────────────┐
+│              Docker Compose Orchestration                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Production Variant: docker-compose.cleona.yml                 │
+│  • 8 Services running in containers                            │
+│  • Resource limits enforced                                    │
+│  • Health checks configured                                    │
+│  • Volume persistence enabled                                  │
+│                                                                  │
+│  Development Variant: docker-compose.dev.yml                   │
+│  • 5 Services with hot reload                                  │
+│  • Generous rate limits                                        │
+│  • Extended token expiry                                       │
+│  • All debugging enabled                                       │
+│                                                                  │
+│  Legacy Base: docker-compose.yml                               │
+│  • Simple 3-service setup                                      │
+│  • Postgres + Ollama + Streamlit                               │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+KEY TECHNOLOGIES
+================
+
+Backend:        FastAPI 0.104, SQLAlchemy 2.0, Python 3.11
+Database:       PostgreSQL 14+ (pgvector extension)
+LLM/Embedding:  Ollama (self-hosted)
+Cache:          Redis 7
+Auth:           AWS Cognito (JWT)
+Frontend:       React, TailwindCSS, React Query
+Containerization: Docker & Docker Compose
+Rate Limiting:  slowapi
+Document Parsing: pdfplumber, pandas
+
+MULTI-TENANT ISOLATION
+======================
+
+                    AWS Cognito
+                         │
+                    JWT Token
+                         │
+                   Tenant ID
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+    Tenant A          Tenant B         Tenant C
+        │                │                │
+    ┌───┴──┐         ┌────┴────┐      ┌──┴──┐
+    │      │         │         │      │     │
+ Docs   Chat      Docs     Chat    Docs  Chat
+ Embed  Msgs      Embed    Msgs    Embed  Msgs
+ User   Widget    User    Widget   User   Widget
+ Config Config    Config  Config   Config Config
+
+Each tenant is isolated at the database level
+Widget CORS configuration per tenant
+Rate limits per tenant
+Separate storage and embeddings
+

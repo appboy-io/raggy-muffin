@@ -10,7 +10,53 @@ import {
   ClipboardDocumentIcon,
   CheckIcon,
   ComputerDesktopIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
+
+// Simple Tooltip component for widgets page
+function Tooltip({ children, content, position = "right" }) {
+  const [isVisible, setIsVisible] = useState(false);
+  
+  const positionClasses = {
+    right: "left-full top-1/2 -translate-y-1/2 ml-2",
+    left: "right-full top-1/2 -translate-y-1/2 mr-2",
+    top: "bottom-full left-1/2 -translate-x-1/2 mb-2",
+    bottom: "top-full left-1/2 -translate-x-1/2 mt-2"
+  };
+
+  return (
+    <div className="relative inline-block">
+      <div
+        onMouseEnter={() => setIsVisible(true)}
+        onMouseLeave={() => setIsVisible(false)}
+      >
+        {children}
+      </div>
+      {isVisible && (
+        <div className={`absolute z-50 ${positionClasses[position]}`}>
+          <div className="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 max-w-xs shadow-lg">
+            <div className="relative">
+              {content}
+              {/* Arrow pointer */}
+              {position === "right" && (
+                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+              )}
+              {position === "left" && (
+                <div className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+              )}
+              {position === "top" && (
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+              )}
+              {position === "bottom" && (
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Widgets() {
   const [copied, setCopied] = useState(false);
@@ -189,9 +235,14 @@ export default function Widgets() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Welcome Message
-              </label>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Welcome Message
+                </label>
+                <Tooltip content="The message users see when the chat widget first loads on your website. This is displayed before they start chatting with your AI agent." position="top">
+                  <InformationCircleIcon className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                </Tooltip>
+              </div>
               <textarea
                 name="welcome_message"
                 value={formData.welcome_message}
@@ -306,14 +357,40 @@ export default function Widgets() {
                 className="inline-flex items-center px-4 py-2 rounded-lg shadow-sm text-white text-sm"
                 style={{ backgroundColor: formData.primary_color }}
               >
-                <span className="mr-2">{config.brand_logo}</span>
+                {widgetConfig?.avatar_url ? (
+                  <img 
+                    src={`${process.env.REACT_APP_API_URL}${widgetConfig.avatar_url}`}
+                    alt="Widget avatar"
+                    className="h-6 w-6 rounded-full mr-2 object-cover border border-white/20"
+                  />
+                ) : (
+                  <span className="mr-2">{config.brand_logo}</span>
+                )}
                 {formData.widget_title || 'Chat Assistant'}
               </div>
               <div className="mt-2 text-sm text-gray-600">
                 {formData.widget_subtitle || 'How can I help you?'}
               </div>
-              <div className="mt-3 p-3 bg-white rounded border text-sm">
-                {formData.welcome_message || 'Hello! How can I assist you today?'}
+              <div className="mt-3 p-3 bg-white rounded border">
+                <div className="flex items-start space-x-2">
+                  {widgetConfig?.avatar_url ? (
+                    <img 
+                      src={`${process.env.REACT_APP_API_URL}${widgetConfig.avatar_url}`}
+                      alt="Assistant avatar"
+                      className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0"
+                         style={{ backgroundColor: formData.primary_color }}>
+                      <span className="text-white text-sm">{config.brand_logo}</span>
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <div className="inline-block bg-gray-100 rounded-lg px-3 py-2 text-sm">
+                      {formData.welcome_message || 'Hello! How can I assist you today?'}
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="mt-3">
                 <input

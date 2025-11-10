@@ -33,6 +33,17 @@ class AuthResponse(BaseModel):
     message: str
     data: Optional[dict] = None
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    company_name: str
+    contact_name: Optional[str] = None
+    industry: Optional[str] = None
+
 @router.post("/signup", response_model=AuthResponse)
 @rate_limit_auth_endpoints()
 async def sign_up(signup_request: SignUpRequest, request: Request):

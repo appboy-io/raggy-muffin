@@ -12,11 +12,18 @@ import {
   PhoneIcon,
   EnvelopeIcon,
   GlobeAltIcon,
+  CogIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 
 const Chat = () => {
   const { user, isAuthenticated } = useAuth();
   const { config } = useConfig();
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState('chat');
+  
+  // Chat state
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -24,6 +31,13 @@ const Chat = () => {
   const [streamingMessageId, setStreamingMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
+  
+  // Agent settings state
+  const [agentConfig, setAgentConfig] = useState(null);
+  const [agentConfigLoading, setAgentConfigLoading] = useState(false);
+  const [personalityOptions, setPersonalityOptions] = useState(null);
+  const [previewPrompt, setPreviewPrompt] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,6 +55,104 @@ const Chat = () => {
       }
     };
   }, []);
+
+  // Load agent config and personality options on tab change
+  useEffect(() => {
+    if (activeTab === 'settings' && user?.access_token) {
+      loadAgentConfig();
+      loadPersonalityOptions();
+    }
+  }, [activeTab, user?.access_token]);
+
+  const loadAgentConfig = async () => {
+    setAgentConfigLoading(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/agent/config`, {
+        headers: {
+          'Authorization': `Bearer ${user.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const config = await response.json();
+        setAgentConfig(config);
+      } else {
+        throw new Error('Failed to load agent config');
+      }
+    } catch (error) {
+      console.error('Error loading agent config:', error);
+      toast.error('Failed to load agent settings');
+    } finally {
+      setAgentConfigLoading(false);
+    }
+  };
+
+  const loadPersonalityOptions = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/agent/personality-options`);
+      
+      if (response.ok) {
+        const options = await response.json();
+        setPersonalityOptions(options);
+      }
+    } catch (error) {
+      console.error('Error loading personality options:', error);
+    }
+  };
+
+  const updateAgentConfig = async (configData) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/agent/config`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${user.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(configData)
+      });
+      
+      if (response.ok) {
+        const updatedConfig = await response.json();
+        setAgentConfig(updatedConfig);
+        toast.success('Agent settings saved successfully!');
+        return true;
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to update agent config');
+      }
+    } catch (error) {
+      console.error('Error updating agent config:', error);
+      toast.error(error.message || 'Failed to save agent settings');
+      return false;
+    }
+  };
+
+  const generatePreview = async (configData) => {
+    setPreviewLoading(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/agent/preview-prompt`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${user.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(configData)
+      });
+      
+      if (response.ok) {
+        const preview = await response.json();
+        setPreviewPrompt(preview.preview);
+      } else {
+        throw new Error('Failed to generate preview');
+      }
+    } catch (error) {
+      console.error('Error generating preview:', error);
+      toast.error('Failed to generate preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -277,6 +389,256 @@ const Chat = () => {
     });
   };
 
+  const AgentSettings = () => {
+    const [localConfig, setLocalConfig] = useState(null);
+    const [showPreview, setShowPreview] = useState(false);
+
+    useEffect(() => {
+      if (agentConfig) {
+        setLocalConfig({ ...agentConfig });
+      }
+    }, [agentConfig]);
+
+    const handleConfigChange = (field, value) => {
+      setLocalConfig(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    };
+
+    const handlePersonalityTraitToggle = (trait) => {
+      const currentTraits = localConfig?.personality_traits || [];
+      const newTraits = currentTraits.includes(trait)
+        ? currentTraits.filter(t => t !== trait)
+        : [...currentTraits, trait];
+      
+      if (newTraits.length <= 5) {
+        handleConfigChange('personality_traits', newTraits);
+      } else {
+        toast.error('Maximum 5 personality traits allowed');
+      }
+    };
+
+    const handleSave = async () => {
+      if (!localConfig) return;
+      
+      const success = await updateAgentConfig(localConfig);
+      if (success) {
+        setShowPreview(false);
+      }
+    };
+
+    const handleGeneratePreview = async () => {
+      if (!localConfig) return;
+      
+      await generatePreview({
+        agent_name: localConfig.agent_name,
+        agent_role: localConfig.agent_role,
+        personality_traits: localConfig.personality_traits,
+        custom_instructions: localConfig.custom_instructions,
+        response_style: localConfig.response_style,
+        industry: localConfig.industry
+      });
+      setShowPreview(true);
+    };
+
+    if (agentConfigLoading) {
+      return (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+          <span className="ml-2">Loading agent settings...</span>
+        </div>
+      );
+    }
+
+    if (!localConfig || !personalityOptions) {
+      return (
+        <div className="text-center py-12">
+          <CogIcon className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-4 text-lg font-medium text-gray-900">
+            Unable to load settings
+          </h3>
+          <p className="mt-2 text-gray-600">
+            Please try refreshing the page.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Agent Name
+              </label>
+              <input
+                type="text"
+                value={localConfig.agent_name || ''}
+                onChange={(e) => handleConfigChange('agent_name', e.target.value)}
+                className="input-field"
+                placeholder="Assistant"
+                maxLength={50}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Agent Role
+              </label>
+              <input
+                type="text"
+                value={localConfig.agent_role || ''}
+                onChange={(e) => handleConfigChange('agent_role', e.target.value)}
+                className="input-field"
+                placeholder="helpful assistant"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Greeting Message
+            </label>
+            <textarea
+              value={localConfig.greeting_message || ''}
+              onChange={(e) => handleConfigChange('greeting_message', e.target.value)}
+              className="input-field"
+              rows={3}
+              maxLength={500}
+              placeholder="Hello! How can I help you today?"
+            />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Personality & Style</h3>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Personality Traits (Max 5)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {personalityOptions.personality_traits.map((trait) => (
+                <button
+                  key={trait.value}
+                  onClick={() => handlePersonalityTraitToggle(trait.value)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    (localConfig.personality_traits || []).includes(trait.value)
+                      ? 'bg-primary-100 border-primary-200 text-primary-700'
+                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {trait.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Response Style
+              </label>
+              <select
+                value={localConfig.response_style || 'conversational'}
+                onChange={(e) => handleConfigChange('response_style', e.target.value)}
+                className="input-field"
+              >
+                {personalityOptions.response_styles.map((style) => (
+                  <option key={style.value} value={style.value}>
+                    {style.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Industry
+              </label>
+              <select
+                value={localConfig.industry || 'general'}
+                onChange={(e) => handleConfigChange('industry', e.target.value)}
+                className="input-field"
+              >
+                {personalityOptions.industries.map((industry) => (
+                  <option key={industry.value} value={industry.value}>
+                    {industry.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Advanced Settings</h3>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Custom Instructions
+            </label>
+            <textarea
+              value={localConfig.custom_instructions || ''}
+              onChange={(e) => handleConfigChange('custom_instructions', e.target.value)}
+              className="input-field"
+              rows={4}
+              placeholder="Add any specific instructions for your agent..."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              System Prompt Override (Advanced)
+            </label>
+            <textarea
+              value={localConfig.system_prompt || ''}
+              onChange={(e) => handleConfigChange('system_prompt', e.target.value)}
+              className="input-field"
+              rows={6}
+              maxLength={5000}
+              placeholder="Leave empty to use auto-generated prompt based on settings above..."
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              If provided, this will override the auto-generated prompt entirely.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center">
+          <button
+            onClick={handleGeneratePreview}
+            disabled={previewLoading}
+            className="btn-secondary flex items-center space-x-2"
+          >
+            <EyeIcon className="h-4 w-4" />
+            <span>{previewLoading ? 'Generating...' : 'Preview Prompt'}</span>
+          </button>
+
+          <button
+            onClick={handleSave}
+            className="btn-primary"
+          >
+            Save Settings
+          </button>
+        </div>
+
+        {showPreview && previewPrompt && (
+          <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+            <h4 className="text-lg font-medium text-gray-900 mb-3">Generated Prompt Preview</h4>
+            <pre className="whitespace-pre-wrap text-sm text-gray-700 bg-white p-4 rounded border">
+              {previewPrompt}
+            </pre>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const MessageBubble = ({ message }) => {
     const isUser = message.type === 'user';
     const isError = message.type === 'error';
@@ -403,7 +765,7 @@ const Chat = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto h-[calc(100vh-200px)] flex flex-col animate-fade-in">
+    <div className="max-w-6xl mx-auto animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-3">
@@ -413,11 +775,11 @@ const Chat = () => {
               Chat with {config.brand_name}
             </h1>
             <p className="text-gray-600">
-              Ask questions about your uploaded documents
+              Manage your AI assistant and chat with your documents
             </p>
           </div>
         </div>
-        {messages.length > 0 && (
+        {activeTab === 'chat' && messages.length > 0 && (
           <button
             onClick={clearChat}
             className="btn-secondary text-sm"
@@ -427,70 +789,109 @@ const Chat = () => {
         )}
       </div>
 
-      {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 rounded-lg p-4 mb-4">
-        {messages.length === 0 ? (
-          <div className="text-center py-12">
-            <SparklesIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Start a conversation
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Ask me anything about your uploaded documents
-            </p>
-            <div className="text-left max-w-md mx-auto">
-              <p className="text-sm text-gray-500 mb-2">Example questions:</p>
-              <ul className="text-sm text-gray-600 space-y-1">
-                <li>• "What services are available for healthcare?"</li>
-                <li>• "How can I contact the housing assistance program?"</li>
-                <li>• "What are the requirements for financial aid?"</li>
-              </ul>
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('chat')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'chat'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center space-x-2">
+              <ChatBubbleLeftRightIcon className="h-5 w-5" />
+              <span>Chat</span>
             </div>
-          </div>
-        ) : (
-          <div>
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
-            {isLoading && (
-              <div className="flex justify-start mb-4">
-                <div className="flex flex-row">
-                  <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center mr-2">
-                    <span className="text-lg">{config.brand_logo}</span>
-                  </div>
-                  <div className="bg-white border border-gray-200 rounded-lg px-4 py-2">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'settings'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center space-x-2">
+              <CogIcon className="h-5 w-5" />
+              <span>Agent Settings</span>
+            </div>
+          </button>
+        </nav>
       </div>
 
-      {/* Input Form */}
-      <form onSubmit={sendMessage} className="flex space-x-2">
-        <input
-          type="text"
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          placeholder="Type your message..."
-          className="flex-1 input-field"
-          disabled={isLoading}
-        />
-        <button
-          type="submit"
-          disabled={!inputMessage.trim() || isLoading}
-          className="btn-primary px-4 py-2"
-        >
-          <PaperAirplaneIcon className="h-5 w-5" />
-        </button>
-      </form>
+      {/* Tab Content */}
+      {activeTab === 'chat' ? (
+        <div className="h-[calc(100vh-280px)] flex flex-col">
+          {/* Messages Container */}
+          <div className="flex-1 overflow-y-auto bg-gray-50 rounded-lg p-4 mb-4">
+            {messages.length === 0 ? (
+              <div className="text-center py-12">
+                <SparklesIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Start a conversation
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  Ask me anything about your uploaded documents
+                </p>
+                <div className="text-left max-w-md mx-auto">
+                  <p className="text-sm text-gray-500 mb-2">Example questions:</p>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li>• "What services are available for healthcare?"</li>
+                    <li>• "How can I contact the housing assistance program?"</li>
+                    <li>• "What are the requirements for financial aid?"</li>
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {messages.map((message) => (
+                  <MessageBubble key={message.id} message={message} />
+                ))}
+                {isLoading && (
+                  <div className="flex justify-start mb-4">
+                    <div className="flex flex-row">
+                      <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center mr-2">
+                        <span className="text-lg">{config.brand_logo}</span>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg px-4 py-2">
+                        <div className="flex space-x-1">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          {/* Input Form */}
+          <form onSubmit={sendMessage} className="flex space-x-2">
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              placeholder="Type your message..."
+              className="flex-1 input-field"
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={!inputMessage.trim() || isLoading}
+              className="btn-primary px-4 py-2"
+            >
+              <PaperAirplaneIcon className="h-5 w-5" />
+            </button>
+          </form>
+        </div>
+      ) : (
+        <AgentSettings />
+      )}
     </div>
   );
 };
